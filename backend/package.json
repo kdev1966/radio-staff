@@ -1,0 +1,24 @@
+{
+  "name": "radio-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "start:dev": "nest start --watch"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10",
+    "@nestjs/core": "^10",
+    "@nestjs/platform-express": "^10",
+    "@nestjs/typeorm": "^10",
+    "typeorm": "^0.3",
+    "pg": "^8",
+    "reflect-metadata": "^0.1",
+    "rxjs": "^7"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10",
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}
