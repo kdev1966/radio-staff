@@ -1,0 +1,30 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install OpenSSL for Prisma
+RUN apk add --no-cache openssl
+
+# Copy package files
+COPY package*.json ./
+
+# Install ALL dependencies (including dev)
+RUN npm ci
+
+# Copy prisma schema
+COPY prisma ./prisma
+
+# Set Prisma binary target for Alpine
+ENV PRISMA_CLI_BINARY_TARGETS=linux-musl
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Copy source code
+COPY . .
+
+# Expose port
+EXPOSE 4000
+
+# Development command will be overridden by docker-compose
+CMD ["npm", "run", "start:dev"]

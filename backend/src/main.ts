@@ -1,23 +1,19 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
-import { ValidationPipe, Logger } from '@nestjs/common';
-import { AllExceptionsFilter } from './common/filters/http-exception.filter';
-import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const logger = new Logger('Bootstrap');
 
-  // Global prefix for API routes
+  const configService = app.get(ConfigService);
+
   app.setGlobalPrefix('api');
 
-  // CORS configuration - use environment variable for production
-  app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-    credentials: true,
-  });
+  app.useGlobalFilters(new GlobalExceptionFilter(configService));
 
-  // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -26,15 +22,24 @@ async function bootstrap() {
     }),
   );
 
-  // Global exception filter
-  app.useGlobalFilters(new AllExceptionsFilter());
+  app.enableCors({
+    origin: ['http://localhost', 'http://localhost:3000', 'http://localhost:80'],
+    credentials: true,
+  });
 
-  // Global logging interceptor
-  app.useGlobalInterceptors(new LoggingInterceptor());
+  const config = new DocumentBuilder()
+    .setTitle('Radio Staff Manager API')
+    .setDescription('API de gestion du personnel radiologie')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
 
   const port = process.env.PORT || 4000;
   await app.listen(port);
-  logger.log(`Backend running on http://localhost:${port}`);
-  logger.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Backend running on http://localhost:${port}`);
+  console.log(`Swagger docs on http://localhost:${port}/api/docs`);
 }
+
 bootstrap();

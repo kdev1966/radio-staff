@@ -1,32 +1,33 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { validate } from './config/env.validation';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaService } from './prisma.service';
+import { EmployeeModule } from './employee/employee.module';
+import { ShiftModule } from './shift/shift.module';
+import { LeaveModule } from './leave/leave.module';
+import { KeycloakModule } from './keycloak/keycloak.module';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
-    // Environment configuration with validation
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
-      validate,
     }),
-
-    // Database configuration using environment variables
-    TypeOrmModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres' as const,
-        host: configService.get<string>('DATABASE_HOST'),
-        port: configService.get<number>('DATABASE_PORT'),
-        username: configService.get<string>('DATABASE_USER'),
-        password: configService.get<string>('DATABASE_PASSWORD'),
-        database: configService.get<string>('DATABASE_NAME'),
-        synchronize: configService.get('NODE_ENV') !== 'production', // Disable in production
-        autoLoadEntities: true,
-        logging: configService.get('NODE_ENV') === 'development',
-      }),
-    }),
+    EmployeeModule,
+    ShiftModule,
+    LeaveModule,
+    KeycloakModule,
   ],
+  controllers: [HealthController],
+  providers: [
+    PrismaService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
+  ],
+  exports: [PrismaService],
 })
 export class AppModule {}

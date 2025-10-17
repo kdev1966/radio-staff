@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  employees   EmployeeRole[]
+}
+
+model Employee {
+  id            String    @id @default(uuid())
+  firstName     String
+  lastName      String
+  email         String?   @unique
+  phone         String?
+  hireDate      DateTime? @db.Date
+  contractType  ContractType
+  weeklyHours   Int       @default(35)
+  diplomas      String[]
+  keycloakId    String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  roles         EmployeeRole[]
+  leaveRequests LeaveRequest[]
+  assignments   ShiftAssignment[]
+  auditLogs     AuditLog[]
+}
+
+model EmployeeRole {
+  employeeId String
+  roleId     String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  @@id([employeeId, roleId])
+}
+
+enum ContractType {
+  CDI
+  CDD
+  INTERIM
+  PART_TIME
+}
+
+enum LeaveType {
+  CP
+  RTT
+  MALADIE
+  FORMATION
+  SPECIAL
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED_BY_MANAGER
+  APPROVED
+  REJECTED
+}
+
+model LeaveRequest {
+  id                 String      @id @default(uuid())
+  employeeId         String
+  employee           Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  startDate          DateTime    @db.Date
+  endDate            DateTime    @db.Date
+  days               Decimal     @db.Decimal(3,1)
+  type               LeaveType
+  status             LeaveStatus @default(PENDING)
+  requestedAt        DateTime    @default(now())
+  managerApprovedAt  DateTime?
+  managerApprovedBy  String?
+  hrApprovedAt       DateTime?
+  hrApprovedBy       String?
+  rejectedAt         DateTime?
+  rejectedBy         String?
+  rejectionReason    String?
+}
+
+enum ShiftPeriod {
+  MORNING
+  AFTERNOON
+  NIGHT
+}
+
+model Shift {
+  id          String      @id @default(uuid())
+  shiftDate   DateTime    @db.Date
+  period      ShiftPeriod
+  startTime   DateTime    @db.Time()
+  endTime     DateTime    @db.Time()
+  needed      Int         @default(1)
+  assignments ShiftAssignment[]
+  @@unique([shiftDate, period])
+}
+
+model ShiftAssignment {
+  id         String   @id @default(uuid())
+  shiftId    String
+  employeeId String
+  assignedAt DateTime @default(now())
+  assignedBy String?
+  shift      Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  @@unique([shiftId, employeeId])
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  ASSIGN_SHIFT
+  APPROVE_LEAVE
+  REJECT_LEAVE
+}
+
+model AuditLog {
+  id           String      @id @default(uuid())
+  action       AuditAction
+  entityType   String
+  entityId     String?
+  userId       String?
+  username     String?
+  employee     Employee?   @relation(fields: [userId], references: [id])
+  method       String?
+  endpoint     String?
+  statusCode   Int?
+  duration     Int?
+  requestBody  Json?
+  responseBody Json?
+  errorMessage String?
+  details      Json?
+  ipAddress    String?
+  userAgent    String?
+  timestamp    DateTime    @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
+  @@index([statusCode])
+}

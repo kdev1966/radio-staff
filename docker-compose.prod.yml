@@ -1,0 +1,366 @@
+
+# ======================================
+# RADIO STAFF MANAGER - PRODUCTION
+# ======================================
+# Configuration Docker Compose optimisée pour production
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: radio-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-radiodb}
+      POSTGRES_USER: ${POSTGRES_USER:-radio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      # Security hardening
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    networks:
+      - radio-network
+    ports:
+      - "127.0.0.1:5432:5432"  # Bind only to localhost for security
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-radio} -d ${POSTGRES_DB:-radiodb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '${POSTGRES_CPU_LIMIT:-1.0}'
+          memory: ${POSTGRES_MEM_LIMIT:-1g}
+        reservations:
+          cpus: '0.25'
+          memory: ${POSTGRES_MEM_RESERVATION:-512m}
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${LOG_MAX_SIZE:-10m}"
+        max-file: "${LOG_MAX_FILE:-3}"
+        labels: "service=postgres"
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Read-only root filesystem except for data
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+
+  keycloak:
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
+      args:
+        KC_HEALTH_ENABLED: "true"
+        KC_METRICS_ENABLED: "true"
+    container_name: radio-keycloak
+    restart: always
+    environment:
+      # Database configuration
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-radiodb}
+      KC_DB_USERNAME: ${POSTGRES_USER:-radio}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_DB_SCHEMA: public
+
+      # Network configuration
+      KC_HOSTNAME: ${SERVER_HOST:-192.168.1.200}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY: edge
+
+      # Admin credentials
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+
+      # Performance tuning
+      KC_CACHE: ispn
+      KC_CACHE_STACK: tcp
+      KC_DB_POOL_INITIAL_SIZE: 5
+      KC_DB_POOL_MIN_SIZE: 5
+      KC_DB_POOL_MAX_SIZE: 20
+
+      # Logging
+      KC_LOG_LEVEL: info
+      KC_LOG_CONSOLE_OUTPUT: json
+
+      # Health & Metrics
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+
+      # Java options for production
+      JAVA_OPTS_APPEND: "-Xms512m -Xmx1024m -XX:MetaspaceSize=96m -XX:MaxMetaspaceSize=256m -Djava.net.preferIPv4Stack=true"
+
+    ports:
+      - "8080:8080"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - radio-network
+
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+
+    # IMPORTANT: Production command (not start-dev)
+    command: start --optimized --import-realm --spi-import-strategy=OVERWRITE_EXISTING
+
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '${KEYCLOAK_CPU_LIMIT:-1.0}'
+          memory: ${KEYCLOAK_MEM_LIMIT:-1g}
+        reservations:
+          cpus: '0.5'
+          memory: ${KEYCLOAK_MEM_RESERVATION:-512m}
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${LOG_MAX_SIZE:-10m}"
+        max-file: "${LOG_MAX_FILE:-3}"
+        labels: "service=keycloak"
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        NODE_ENV: production
+    container_name: radio-backend
+    restart: always
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-radio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-radiodb}?schema=public&connection_limit=10&pool_timeout=30
+
+      # Node environment
+      NODE_ENV: production
+      PORT: 4000
+
+      # Keycloak
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-radio-staff}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-radio-backend}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+
+      # Security
+      JWT_SECRET: ${JWT_SECRET}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
+
+      # CORS
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://192.168.1.200}
+
+      # Rate limiting
+      RATE_LIMIT_TTL: ${RATE_LIMIT_TTL:-60}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    ports:
+      - "127.0.0.1:4000:4000"  # Bind only to localhost, nginx will proxy
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+    networks:
+      - radio-network
+
+    command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run start:prod"
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '${BACKEND_CPU_LIMIT:-0.5}'
+          memory: ${BACKEND_MEM_LIMIT:-512m}
+        reservations:
+          cpus: '0.25'
+          memory: ${BACKEND_MEM_RESERVATION:-256m}
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${LOG_MAX_SIZE:-10m}"
+        max-file: "${LOG_MAX_FILE:-3}"
+        labels: "service=backend"
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.npm
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        NODE_ENV: production
+        NEXT_TELEMETRY_DISABLED: 1
+    container_name: radio-frontend
+    restart: always
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: 1
+      PORT: 3000
+
+      # Public environment variables
+      NEXT_PUBLIC_API_URL: /api
+      NEXT_PUBLIC_KEYCLOAK_URL: http://${SERVER_HOST:-192.168.1.200}:8080
+      NEXT_PUBLIC_KEYCLOAK_REALM: ${KEYCLOAK_REALM:-radio-staff}
+      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: radio-frontend
+
+    networks:
+      - radio-network
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    # Expose uniquement sur le réseau interne
+    expose:
+      - "3000"
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '${FRONTEND_CPU_LIMIT:-0.5}'
+          memory: ${FRONTEND_MEM_LIMIT:-512m}
+        reservations:
+          cpus: '0.25'
+          memory: ${FRONTEND_MEM_RESERVATION:-256m}
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${LOG_MAX_SIZE:-10m}"
+        max-file: "${LOG_MAX_FILE:-3}"
+        labels: "service=frontend"
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: radio-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - radio-network
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx_logs:/var/log/nginx
+      - nginx_cache:/var/cache/nginx
+      # For SSL certificates (when ready)
+      # - ./nginx/ssl:/etc/nginx/ssl:ro
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '${NGINX_CPU_LIMIT:-0.5}'
+          memory: ${NGINX_MEM_LIMIT:-256m}
+        reservations:
+          cpus: '0.1'
+          memory: ${NGINX_MEM_RESERVATION:-128m}
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${LOG_MAX_SIZE:-10m}"
+        max-file: "${LOG_MAX_FILE:-3}"
+        labels: "service=nginx"
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  radio-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  keycloak_data:
+    driver: local
+  nginx_logs:
+    driver: local
+  nginx_cache:
+    driver: local
