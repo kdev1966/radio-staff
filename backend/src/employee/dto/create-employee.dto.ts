@@ -1,21 +1,26 @@
 import {
   IsString,
-  IsEmail,
   IsNotEmpty,
-  IsOptional,
   IsEnum,
+  IsDateString,
   MinLength,
   MaxLength,
   Matches,
 } from 'class-validator';
 
-export enum EmployeeStatus {
-  ACTIVE = 'ACTIVE',
-  INACTIVE = 'INACTIVE',
-  ON_LEAVE = 'ON_LEAVE',
+export enum EmployeeRole {
+  TECHNICIEN = 'TECHNICIEN',
+  ADMINISTRATIF = 'ADMINISTRATIF',
 }
 
 export class CreateEmployeeDto {
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^\d{8,10}$/, {
+    message: 'Le matricule doit contenir entre 8 et 10 chiffres',
+  })
+  matricule!: string;
+
   @IsString()
   @IsNotEmpty()
   @MinLength(2)
@@ -28,32 +33,24 @@ export class CreateEmployeeDto {
   @MaxLength(100)
   lastName!: string;
 
-  @IsEmail()
+  @IsDateString()
   @IsNotEmpty()
-  email!: string;
+  birthDate!: string;
 
   @IsString()
   @IsNotEmpty()
-  @Matches(/^(\+\d{1,3}[- ]?)?\d{10}$/, {
-    message: 'Phone number must be a valid format',
+  @Matches(/^(\+\d{1,3}[- ]?)?\d{9,10}$/, {
+    message: 'Numéro de téléphone invalide',
   })
   phone!: string;
 
-  @IsString()
+  @IsEnum(EmployeeRole)
   @IsNotEmpty()
-  @MinLength(3)
-  @MaxLength(50)
-  employeeNumber!: string;
+  role!: EmployeeRole;
 
   @IsString()
   @IsNotEmpty()
-  teamId!: string;
-
-  @IsEnum(EmployeeStatus)
-  @IsOptional()
-  status?: EmployeeStatus;
-
-  @IsString()
-  @IsOptional()
-  keycloakUserId?: string;
+  @MinLength(5)
+  @MaxLength(200)
+  address!: string;
 }

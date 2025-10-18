@@ -7,45 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Role {
-  id          String    @id @default(uuid())
-  name        String    @unique
-  description String?
-  employees   EmployeeRole[]
+enum EmployeeRole {
+  TECHNICIEN
+  ADMINISTRATIF
 }
 
 model Employee {
-  id            String    @id @default(uuid())
+  id            String       @id @default(uuid())
+  matricule     String       @unique
   firstName     String
   lastName      String
-  email         String?   @unique
-  phone         String?
-  hireDate      DateTime? @db.Date
-  contractType  ContractType
-  weeklyHours   Int       @default(35)
-  diplomas      String[]
-  keycloakId    String?   @unique
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  roles         EmployeeRole[]
+  birthDate     DateTime     @db.Date
+  phone         String
+  role          EmployeeRole
+  address       String
+  keycloakId    String?      @unique
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
   leaveRequests LeaveRequest[]
   assignments   ShiftAssignment[]
   auditLogs     AuditLog[]
-}
-
-model EmployeeRole {
-  employeeId String
-  roleId     String
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  @@id([employeeId, roleId])
-}
-
-enum ContractType {
-  CDI
-  CDD
-  INTERIM
-  PART_TIME
 }
 
 enum LeaveType {

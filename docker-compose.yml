@@ -60,7 +60,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-radio}:${POSTGRES_PASSWORD:-radiopass123}@postgres:5432/${POSTGRES_DB:-radiodb}?schema=public
       NODE_ENV: production
       PORT: 4000
-      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_URL: http://192.168.1.200/auth
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_REALM: radio-staff
       KEYCLOAK_CLIENT_ID: radio-backend
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-secret123}
@@ -85,6 +86,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api
+        NEXT_PUBLIC_KEYCLOAK_URL: http://192.168.1.200/auth
+        NEXT_PUBLIC_KEYCLOAK_REALM: radio-staff
+        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: radio-frontend
     container_name: radio-frontend
     restart: unless-stopped
     environment:

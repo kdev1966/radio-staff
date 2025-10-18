@@ -5,70 +5,55 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Début du seed...');
 
+  // Nettoyer les données existantes
   await prisma.auditLog.deleteMany();
   await prisma.shiftAssignment.deleteMany();
   await prisma.shift.deleteMany();
   await prisma.leaveRequest.deleteMany();
-  await prisma.employeeRole.deleteMany();
   await prisma.employee.deleteMany();
-  await prisma.role.deleteMany();
 
   console.log('🧹 Données existantes supprimées');
 
-  const roleManipulateur = await prisma.role.create({
-    data: { name: 'MANIPULATEUR', description: 'Manipulateur en radiologie médicale' },
-  });
-
-  const roleRadiologue = await prisma.role.create({
-    data: { name: 'RADIOLOGUE', description: 'Médecin radiologue' },
-  });
-
-  console.log('✅ 2 rôles créés');
-
+  // Créer 3 employés
   const employee1 = await prisma.employee.create({
     data: {
-      firstName: 'Dr. Sarah',
+      matricule: '12345678',
+      firstName: 'Sarah',
       lastName: 'Martin',
-      email: 'sarah.martin@hopital.fr',
-      phone: '+33612345678',
-      hireDate: new Date('2020-01-15'),
-      contractType: 'CDI',
-      weeklyHours: 35,
-      diplomas: ['Doctorat en Médecine', 'DES Radiologie'],
-      roles: { create: [{ roleId: roleRadiologue.id }] },
+      birthDate: new Date('1985-03-15'),
+      phone: '0612345678',
+      role: 'TECHNICIEN',
+      address: '12 Rue de la Paix, 75001 Paris',
     },
   });
 
   const employee2 = await prisma.employee.create({
     data: {
+      matricule: '87654321',
       firstName: 'Jean',
       lastName: 'Dupont',
-      email: 'jean.dupont@hopital.fr',
-      phone: '+33623456789',
-      hireDate: new Date('2021-03-10'),
-      contractType: 'CDI',
-      weeklyHours: 35,
-      diplomas: ['Diplôme de Manipulateur en Radiologie'],
-      roles: { create: [{ roleId: roleManipulateur.id }] },
+      birthDate: new Date('1990-07-22'),
+      phone: '0623456789',
+      role: 'TECHNICIEN',
+      address: '45 Avenue des Champs-Élysées, 75008 Paris',
     },
   });
 
   const employee3 = await prisma.employee.create({
     data: {
+      matricule: '11223344',
       firstName: 'Marie',
       lastName: 'Dubois',
-      email: 'marie.dubois@hopital.fr',
-      phone: '+33634567890',
-      hireDate: new Date('2022-06-01'),
-      contractType: 'PART_TIME',
-      weeklyHours: 24,
-      diplomas: ['Diplôme de Manipulateur en Radiologie'],
-      roles: { create: [{ roleId: roleManipulateur.id }] },
+      birthDate: new Date('1988-11-10'),
+      phone: '0634567890',
+      role: 'ADMINISTRATIF',
+      address: '78 Boulevard Saint-Germain, 75005 Paris',
     },
   });
 
   console.log('✅ 3 employés créés');
 
+  // Créer des shifts pour la semaine prochaine
   const shiftPeriods: { period: any; startHour: number; endHour: number; needed: number }[] = [
     { period: 'MORNING', startHour: 7, endHour: 13, needed: 2 },
     { period: 'AFTERNOON', startHour: 13, endHour: 19, needed: 2 },
@@ -106,6 +91,7 @@ async function main() {
 
       shiftsCreated++;
 
+      // Assigner quelques employés
       if (periodConfig.period === 'MORNING' && dayOffset < 3) {
         await prisma.shiftAssignment.create({
           data: {
@@ -140,6 +126,7 @@ async function main() {
   console.log(`✅ ${shiftsCreated} shifts créés (1 semaine × 3 périodes)`);
   console.log(`✅ ${assignmentsCreated} assignations créées`);
 
+  // Créer des demandes de congé
   const futureDate1 = new Date(today);
   futureDate1.setDate(today.getDate() + 14);
 
@@ -182,8 +169,7 @@ async function main() {
 
   console.log('\n🎉 Seed terminé avec succès!');
   console.log('\n📊 Résumé:');
-  console.log(`  - Rôles: 2`);
-  console.log(`  - Employés: 3`);
+  console.log(`  - Employés: 3 (2 Techniciens, 1 Administratif)`);
   console.log(`  - Shifts: ${shiftsCreated}`);
   console.log(`  - Assignations: ${assignmentsCreated}`);
   console.log(`  - Demandes de congé: 2`);

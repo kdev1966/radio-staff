@@ -1,10 +1,23 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
+import { useAuth } from '@/lib/keycloak';
 
 export default function Navigation() {
   const router = useRouter();
+  const { keycloak, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+  };
+
+  const getUserName = () => {
+    if (keycloak?.tokenParsed) {
+      return keycloak.tokenParsed.name || keycloak.tokenParsed.preferred_username || 'Utilisateur';
+    }
+    return 'Utilisateur';
+  };
 
   const navItems = [
     { href: '/', label: 'Tableau de bord', icon: '📊' },
@@ -87,7 +100,25 @@ export default function Navigation() {
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-blue-700">
-          <div className="text-sm text-blue-300">
+          <div className="mb-4">
+            <div className="flex items-center mb-3">
+              <div className="w-10 h-10 bg-blue-700 rounded-full flex items-center justify-center text-lg">
+                👤
+              </div>
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-semibold text-white truncate">{getUserName()}</p>
+                <p className="text-xs text-blue-300">Connecté</p>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full bg-blue-700 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold flex items-center justify-center"
+            >
+              <span className="mr-2">🚪</span>
+              Déconnexion
+            </button>
+          </div>
+          <div className="text-sm text-blue-300 pt-3 border-t border-blue-700">
             <p className="font-semibold">Service Radiologie</p>
             <p className="text-xs mt-1">Hôpital Central</p>
           </div>

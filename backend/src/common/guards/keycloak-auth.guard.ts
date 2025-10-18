@@ -30,15 +30,18 @@ export class KeycloakAuthGuard implements CanActivate {
   private jwksClient: jwksClient.JwksClient;
   private readonly keycloakRealm: string;
   private readonly keycloakUrl: string;
+  private readonly keycloakInternalUrl: string;
   private readonly clientId: string;
 
   constructor(private configService: ConfigService) {
     this.keycloakUrl = this.configService.get<string>('KEYCLOAK_URL', 'http://localhost:8080');
+    this.keycloakInternalUrl = this.configService.get<string>('KEYCLOAK_INTERNAL_URL', this.keycloakUrl);
     this.keycloakRealm = this.configService.get<string>('KEYCLOAK_REALM', 'radio-staff');
     this.clientId = this.configService.get<string>('KEYCLOAK_CLIENT_ID', 'radio-staff-backend');
 
+    // Use internal URL for JWKS endpoint (Docker network communication)
     this.jwksClient = jwksClient({
-      jwksUri: `${this.keycloakUrl}/realms/${this.keycloakRealm}/protocol/openid-connect/certs`,
+      jwksUri: `${this.keycloakInternalUrl}/realms/${this.keycloakRealm}/protocol/openid-connect/certs`,
       cache: true,
       cacheMaxEntries: 5,
       cacheMaxAge: 600000,
