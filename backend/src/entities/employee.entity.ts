@@ -46,9 +46,6 @@ export class Employee {
   @Column({ select: false })
   password!: string;
 
-  @Column({ unique: true, nullable: true, name: 'keycloak_id' })
-  keycloakId?: string;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
