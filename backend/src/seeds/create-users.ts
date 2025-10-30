@@ -43,7 +43,7 @@ const users: UserSeed[] = [
     firstName: 'Responsable',
     lastName: 'RH',
     email: 'rh@radio.local',
-    password: 'rh123',
+    password: 'rh123456',
     role: EmployeeRole.RH,
     phone: '+33 1 23 45 67 91',
     address: '3 Rue de l\'Hôpital',
