@@ -1,5 +1,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
+# Configure npm to use mirror and increase timeout
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm config set fetch-timeout 300000 && \
+    npm config set fetch-retries 5
 COPY package*.json ./
 RUN npm ci --only=production
 
@@ -18,6 +22,10 @@ ENV NEXT_PUBLIC_KEYCLOAK_URL=$NEXT_PUBLIC_KEYCLOAK_URL
 ENV NEXT_PUBLIC_KEYCLOAK_REALM=$NEXT_PUBLIC_KEYCLOAK_REALM
 ENV NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=$NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
 
+# Configure npm to use mirror and increase timeout
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm config set fetch-timeout 300000 && \
+    npm config set fetch-retries 5
 COPY package*.json ./
 RUN npm ci
 COPY . .

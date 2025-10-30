@@ -30,6 +30,14 @@ export default function EmployesPage() {
   });
   const [error, setError] = useState('');
 
+  // Format phone number for display (e.g., 98765432 => 98 765 432)
+  const formatPhoneNumber = (phone: string): string => {
+    if (phone.length === 8) {
+      return `${phone.slice(0, 2)} ${phone.slice(2, 5)} ${phone.slice(5)}`;
+    }
+    return phone;
+  };
+
   useEffect(() => {
     // Only load employees when Keycloak is initialized and user is authenticated
     if (initialized && authenticated) {
@@ -155,9 +163,13 @@ export default function EmployesPage() {
                 required
                 pattern="\d{8,10}"
                 value={formData.matricule}
-                onChange={(e) => setFormData({ ...formData, matricule: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '');
+                  setFormData({ ...formData, matricule: value });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="ex: 12345678"
+                placeholder="ex: 123456789"
+                title="Matricule unique de l'employé (8 à 10 chiffres)"
               />
             </div>
 
@@ -202,15 +214,21 @@ export default function EmployesPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Numéro de téléphone *
+                Téléphone Tunisie (8 chiffres) *
               </label>
               <input
                 type="tel"
                 required
+                pattern="\d{8}"
+                maxLength={8}
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '');
+                  setFormData({ ...formData, phone: value });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="ex: 0612345678"
+                placeholder="ex: 98765432"
+                title="Format: 8 chiffres (ex: 98765432 ou 22345678)"
               />
             </div>
 
@@ -241,7 +259,7 @@ export default function EmployesPage() {
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Adresse complète"
+                placeholder="ex: 15 Avenue Habib Bourguiba, Tunis"
               />
             </div>
 
@@ -315,8 +333,8 @@ export default function EmployesPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(employee.birthDate).toLocaleDateString('fr-FR')}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {employee.phone}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
+                      {formatPhoneNumber(employee.phone)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span

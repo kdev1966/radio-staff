@@ -1,14 +1,18 @@
 import { Controller, Get } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 
 @Controller('health')
 export class HealthController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectDataSource()
+    private dataSource: DataSource,
+  ) {}
 
   @Get()
   async check() {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await this.dataSource.query('SELECT 1');
       return {
         status: 'ok',
         timestamp: new Date().toISOString(),

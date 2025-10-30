@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+// import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
@@ -9,6 +10,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const configService = app.get(ConfigService);
+
+  // Cookie parser for CSRF protection - disabled for now
+  // app.use(cookieParser());
 
   app.setGlobalPrefix('api');
 
@@ -22,9 +26,18 @@ async function bootstrap() {
     }),
   );
 
+  // CORS configuration using environment variables
+  const allowedOrigins = (
+    configService.get<string>('ALLOWED_ORIGINS', 'http://localhost:3000')
+  ).split(',').map(origin => origin.trim());
+
   app.enableCors({
-    origin: ['http://localhost', 'http://localhost:3000', 'http://localhost:80'],
+    origin: allowedOrigins,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With'],
+    exposedHeaders: ['X-CSRF-Token'],
+    maxAge: 3600,
   });
 
   const config = new DocumentBuilder()

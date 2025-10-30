@@ -4,13 +4,18 @@ import {
   ExecutionContext,
   CallHandler,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
-import { PrismaService } from '../../prisma.service';
+import { AuditLog, AuditAction } from '../../entities/audit-log.entity';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(AuditLog)
+    private auditLogRepository: Repository<AuditLog>,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
@@ -42,24 +47,23 @@ export class AuditInterceptor implements NestInterceptor {
           const action = this.getActionFromMethod(request.method);
 
           try {
-            await this.prisma.auditLog.create({
-              data: {
-                userId,
-                username,
-                action,
-                entityType,
-                entityId: entityId || null,
-                method: request.method,
-                endpoint: request.url,
-                ipAddress,
-                userAgent,
-                statusCode,
-                duration,
-                requestBody: this.sanitizeBody(request.body),
-                responseBody: statusCode < 400 ? this.sanitizeResponse(data) : null,
-                timestamp: new Date(),
-              },
+            const auditLog = this.auditLogRepository.create({
+              userId,
+              username,
+              action,
+              entityType,
+              entityId: entityId || undefined,
+              method: request.method,
+              endpoint: request.url,
+              ipAddress,
+              userAgent,
+              statusCode,
+              duration,
+              requestBody: this.sanitizeBody(request.body),
+              responseBody: statusCode < 400 ? this.sanitizeResponse(data) : undefined,
+              timestamp: new Date(),
             });
+            await this.auditLogRepository.save(auditLog);
           } catch (error) {
             console.error('Failed to create audit log:', error);
             // Don't throw error to avoid breaking the main request
@@ -75,24 +79,23 @@ export class AuditInterceptor implements NestInterceptor {
           const action = this.getActionFromMethod(request.method);
 
           try {
-            await this.prisma.auditLog.create({
-              data: {
-                userId,
-                username,
-                action,
-                entityType,
-                entityId: entityId || null,
-                method: request.method,
-                endpoint: request.url,
-                ipAddress,
-                userAgent,
-                statusCode,
-                duration,
-                requestBody: this.sanitizeBody(request.body),
-                errorMessage: error.message || 'Unknown error',
-                timestamp: new Date(),
-              },
+            const auditLog = this.auditLogRepository.create({
+              userId,
+              username,
+              action,
+              entityType,
+              entityId: entityId || undefined,
+              method: request.method,
+              endpoint: request.url,
+              ipAddress,
+              userAgent,
+              statusCode,
+              duration,
+              requestBody: this.sanitizeBody(request.body),
+              errorMessage: error.message || 'Unknown error',
+              timestamp: new Date(),
             });
+            await this.auditLogRepository.save(auditLog);
           } catch (auditError) {
             console.error('Failed to create audit log for error:', auditError);
           }
@@ -132,7 +135,7 @@ export class AuditInterceptor implements NestInterceptor {
     return null;
   }
 
-  private getActionFromMethod(method: string): string {
+  private getActionFromMethod(method: string): any {
     switch (method) {
       case 'POST':
         return 'CREATE';
@@ -147,7 +150,7 @@ export class AuditInterceptor implements NestInterceptor {
   }
 
   private sanitizeBody(body: any): any {
-    if (!body) return null;
+    if (!body) return undefined;
 
     // Remove sensitive fields
     const sanitized = { ...body };
@@ -169,7 +172,7 @@ export class AuditInterceptor implements NestInterceptor {
   }
 
   private sanitizeResponse(data: any): any {
-    if (!data) return null;
+    if (!data) return undefined;
 
     // Limit response size
     const stringified = JSON.stringify(data);

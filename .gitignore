@@ -36,6 +36,7 @@ logs/
 
 # Backups
 backups/
+.backups/
 
 # Prisma
 prisma/migrations/.migrationlock
@@ -43,3 +44,17 @@ prisma/migrations/.migrationlock
 # Testing
 coverage/
 .nyc_output/
+
+# Security - Generated secrets
+.env.production
+.env.local
+secrets/
+*.enc
+*-password.txt
+
+# Environment files with sensitive data
+.env.*.local
+.env.secrets*
+backend/.env
+backend/.env.backup.*
+frontend/.env.local

@@ -1,28 +1,44 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
-import { ShiftPeriod } from './dto/create-shift.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Not, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { Shift, ShiftPeriod, DayType } from '../entities/shift.entity';
+import { ShiftAssignment } from '../entities/shift-assignment.entity';
+import { ShiftPosition, PositionName, RequiredRole } from '../entities/shift-position.entity';
+import { Employee } from '../entities/employee.entity';
+import { HolidaysService } from '../common/services/holidays.service';
 
 @Injectable()
 export class ShiftService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Shift)
+    private shiftRepository: Repository<Shift>,
+    @InjectRepository(ShiftAssignment)
+    private shiftAssignmentRepository: Repository<ShiftAssignment>,
+    @InjectRepository(ShiftPosition)
+    private shiftPositionRepository: Repository<ShiftPosition>,
+    @InjectRepository(Employee)
+    private employeeRepository: Repository<Employee>,
+    private holidaysService: HolidaysService,
+  ) {}
 
   async findAll() {
-    return this.prisma.shift.findMany({
-      include: { assignments: { include: { employee: true } } },
-      orderBy: [{ shiftDate: 'asc' }, { startTime: 'asc' }],
+    return this.shiftRepository.find({
+      relations: ['assignments', 'assignments.employee', 'positions'],
+      order: { shiftDate: 'ASC', startTime: 'ASC' },
     });
   }
 
-  async create(data: { shiftDate: Date; period: ShiftPeriod; needed?: number }) {
-    const { shiftDate, period, needed = 1 } = data;
+  async create(data: {
+    shiftDate: Date;
+    period: ShiftPeriod;
+    dayType?: DayType;
+    needed?: number;
+  }) {
+    const { shiftDate, period, dayType: providedDayType, needed } = data;
 
-    const existing = await this.prisma.shift.findUnique({
-      where: {
-        shiftDate_period: {
-          shiftDate,
-          period,
-        },
-      },
+    // Vérifier si un shift existe déjà
+    const existing = await this.shiftRepository.findOne({
+      where: { shiftDate, period },
     });
 
     if (existing) {
@@ -31,87 +47,116 @@ export class ShiftService {
       );
     }
 
+    // Déterminer automatiquement le type de jour si non fourni
+    const dayType = providedDayType ?? this.determineDayType(shiftDate);
+
     const times = this.getShiftTimes(period);
 
-    return this.prisma.shift.create({
-      data: {
-        shiftDate,
-        period,
-        startTime: times.start,
-        endTime: times.end,
-        needed,
-      },
-      include: { assignments: { include: { employee: true } } },
+    // Créer le shift
+    const shift = this.shiftRepository.create({
+      shiftDate,
+      period,
+      startTime: times.start,
+      endTime: times.end,
+      dayType,
+      needed: needed ?? 1, // Garde la compatibilité avec l'ancien système
+    });
+
+    const savedShift = await this.shiftRepository.save(shift);
+
+    // Générer et créer automatiquement les positions
+    const positionDefinitions = this.generatePositionDefinitions(dayType, period);
+
+    const positions = positionDefinitions.map((def) =>
+      this.shiftPositionRepository.create({
+        shiftId: savedShift.id,
+        positionName: def.positionName,
+        needed: def.needed,
+        requiredRole: def.requiredRole,
+      }),
+    );
+
+    await this.shiftPositionRepository.save(positions);
+
+    // Retourner le shift complet avec positions et assignments
+    return this.shiftRepository.findOne({
+      where: { id: savedShift.id },
+      relations: ['assignments', 'assignments.employee', 'positions'],
     });
   }
 
   async assign(shiftId: string, employeeId: string, assignedBy?: string) {
-    const shift = await this.prisma.shift.findUnique({
+    const shift = await this.shiftRepository.findOne({
       where: { id: shiftId },
-      include: { assignments: { include: { employee: true } } },
+      relations: ['assignments', 'assignments.employee'],
     });
 
     if (!shift) {
       throw new NotFoundException(`Shift ${shiftId} non trouvé`);
     }
 
-    const employee = await this.prisma.employee.findUnique({
+    const weekStart = new Date(shift.shiftDate);
+    weekStart.setDate(weekStart.getDate() - 7);
+    const weekEnd = new Date(shift.shiftDate);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    const employee = await this.employeeRepository.findOne({
       where: { id: employeeId },
-      include: {
-        assignments: {
-          include: { shift: true },
-          where: {
-            shift: {
-              shiftDate: {
-                gte: new Date(new Date(shift.shiftDate).getTime() - 7 * 24 * 60 * 60 * 1000),
-                lte: new Date(new Date(shift.shiftDate).getTime() + 7 * 24 * 60 * 60 * 1000),
-              },
-            },
-          },
-        },
-      },
+      relations: ['assignments', 'assignments.shift'],
     });
 
     if (!employee) {
       throw new NotFoundException(`Employé ${employeeId} non trouvé`);
     }
 
-    await this.validateShiftRules(employee, shift);
+    // Filter assignments within the date range
+    const relevantAssignments = (employee.assignments || []).filter((assignment) => {
+      const assignmentDate = new Date(assignment.shift.shiftDate);
+      return assignmentDate >= weekStart && assignmentDate <= weekEnd;
+    });
 
-    return this.prisma.shiftAssignment.create({
-      data: { shiftId, employeeId, assignedBy },
-      include: { employee: true, shift: true },
+    const employeeWithFilteredAssignments = {
+      ...employee,
+      assignments: relevantAssignments,
+    };
+
+    await this.validateShiftRules(employeeWithFilteredAssignments, shift);
+
+    const assignment = this.shiftAssignmentRepository.create({
+      shiftId,
+      employeeId,
+      assignedBy,
+    });
+
+    const savedAssignment = await this.shiftAssignmentRepository.save(assignment);
+
+    return this.shiftAssignmentRepository.findOne({
+      where: { id: savedAssignment.id },
+      relations: ['employee', 'shift'],
     });
   }
 
   async unassign(assignmentId: string) {
-    return this.prisma.shiftAssignment.delete({ where: { id: assignmentId } });
+    return this.shiftAssignmentRepository.delete(assignmentId);
   }
 
   async getSuggestions(shiftId: string) {
-    const shift = await this.prisma.shift.findUnique({
+    const shift = await this.shiftRepository.findOne({
       where: { id: shiftId },
-      include: { assignments: true },
+      relations: ['assignments'],
     });
 
     if (!shift) {
       throw new NotFoundException(`Shift ${shiftId} non trouvé`);
     }
 
-    const allEmployees = await this.prisma.employee.findMany({
-      include: {
-        assignments: {
-          include: { shift: true },
-          where: {
-            shift: {
-              shiftDate: {
-                gte: new Date(new Date(shift.shiftDate).getTime() - 7 * 24 * 60 * 60 * 1000),
-                lte: new Date(new Date(shift.shiftDate).getTime() + 7 * 24 * 60 * 60 * 1000),
-              },
-            },
-          },
-        },
-      },
+    const weekStart = new Date(shift.shiftDate);
+    weekStart.setDate(weekStart.getDate() - 7);
+    const weekEnd = new Date(shift.shiftDate);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    const allEmployees = await this.employeeRepository.find({
+      relations: ['assignments', 'assignments.shift'],
     });
 
     const suggestions: Array<{
@@ -121,20 +166,31 @@ export class ShiftService {
     }> = [];
 
     for (const employee of allEmployees) {
-      if (shift.assignments.some((a: any) => a.employeeId === employee.id)) {
+      if (shift.assignments?.some((a) => a.employeeId === employee.id)) {
         continue;
       }
 
+      // Filter assignments within the date range
+      const relevantAssignments = (employee.assignments || []).filter((assignment) => {
+        const assignmentDate = new Date(assignment.shift.shiftDate);
+        return assignmentDate >= weekStart && assignmentDate <= weekEnd;
+      });
+
+      const employeeWithFilteredAssignments = {
+        ...employee,
+        assignments: relevantAssignments,
+      };
+
       try {
-        await this.validateShiftRules(employee, shift);
+        await this.validateShiftRules(employeeWithFilteredAssignments, shift);
         suggestions.push({
           employee: {
             id: employee.id,
             firstName: employee.firstName,
             lastName: employee.lastName,
           },
-          weeklyHours: this.calculateWeeklyHours(employee, shift.shiftDate),
-          nightShiftsThisWeek: this.countNightShifts(employee, shift.shiftDate),
+          weeklyHours: this.calculateWeeklyHours(employeeWithFilteredAssignments, shift.shiftDate),
+          nightShiftsThisWeek: this.countNightShifts(employeeWithFilteredAssignments, shift.shiftDate),
         });
       } catch {
         // Employé non éligible
@@ -170,7 +226,7 @@ export class ShiftService {
       );
     }
 
-    if (shift.period === 'NIGHT') {
+    if (shift.period === ShiftPeriod.NIGHT) {
       const nightShifts = this.countNightShifts(employee, shiftDate);
       if (nightShifts >= 2) {
         throw new BadRequestException(
@@ -215,7 +271,7 @@ export class ShiftService {
       if (
         shiftDate >= startOfWeek &&
         shiftDate < endOfWeek &&
-        assignment.shift.period === 'NIGHT'
+        assignment.shift.period === ShiftPeriod.NIGHT
       ) {
         count++;
       }
@@ -226,12 +282,12 @@ export class ShiftService {
 
   private getShiftDuration(period: ShiftPeriod): number {
     switch (period) {
-      case 'MORNING':
-        return 6;
-      case 'AFTERNOON':
-        return 6;
-      case 'NIGHT':
-        return 12;
+      case ShiftPeriod.MORNING:
+        return 6.5; // 7:00 - 13:30
+      case ShiftPeriod.AFTERNOON:
+        return 6.5; // 12:30 - 19:00
+      case ShiftPeriod.NIGHT:
+        return 12; // 19:00 - 7:00
       default:
         return 8;
     }
@@ -242,39 +298,230 @@ export class ShiftService {
     const end = new Date('1970-01-01');
 
     switch (period) {
-      case 'MORNING':
-        start.setHours(7, 0, 0, 0);
-        end.setHours(13, 0, 0, 0);
+      case ShiftPeriod.MORNING:
+        start.setHours(7, 0, 0, 0); // 07:00
+        end.setHours(13, 30, 0, 0); // 13:30
         break;
-      case 'AFTERNOON':
-        start.setHours(13, 0, 0, 0);
-        end.setHours(19, 0, 0, 0);
+      case ShiftPeriod.AFTERNOON:
+        start.setHours(12, 30, 0, 0); // 12:30
+        end.setHours(19, 0, 0, 0); // 19:00
         break;
-      case 'NIGHT':
-        start.setHours(19, 0, 0, 0);
-        end.setHours(7, 0, 0, 0);
+      case ShiftPeriod.NIGHT:
+        start.setHours(19, 0, 0, 0); // 19:00
+        end.setHours(7, 0, 0, 0); // 07:00 (next day)
         break;
     }
 
     return { start, end };
   }
 
+  /**
+   * Détermine automatiquement le type de jour (NORMAL ou WEEKEND_HOLIDAY)
+   * basé sur la date fournie en utilisant le service des jours fériés tunisiens
+   */
+  private determineDayType(date: Date): DayType {
+    return this.holidaysService.isWeekendOrHoliday(date)
+      ? DayType.WEEKEND_HOLIDAY
+      : DayType.NORMAL;
+  }
+
+  /**
+   * Génère les définitions de positions selon le type de jour et la période
+   *
+   * Règles:
+   * - Jours NORMAL MATIN: 2 RX, 2 Scanner, 1 Mobile, 2 Réception (admin)
+   * - Jours NORMAL APRÈS-MIDI/SOIR: 2 techniciens flexibles (GENERAL)
+   * - Jours WEEKEND_HOLIDAY: 2 techniciens flexibles (GENERAL) pour toutes périodes
+   */
+  private generatePositionDefinitions(
+    dayType: DayType,
+    period: ShiftPeriod,
+  ): Array<{ positionName: PositionName; needed: number; requiredRole: RequiredRole }> {
+    // Week-end et jours fériés: uniquement techniciens flexibles
+    if (dayType === DayType.WEEKEND_HOLIDAY) {
+      return [
+        {
+          positionName: PositionName.GENERAL,
+          needed: 2,
+          requiredRole: RequiredRole.TECHNICIEN,
+        },
+      ];
+    }
+
+    // Jours normaux
+    if (period === ShiftPeriod.MORNING) {
+      // Matin: postes spécifiques
+      return [
+        {
+          positionName: PositionName.RX,
+          needed: 2,
+          requiredRole: RequiredRole.TECHNICIEN,
+        },
+        {
+          positionName: PositionName.SCANNER,
+          needed: 2,
+          requiredRole: RequiredRole.TECHNICIEN,
+        },
+        {
+          positionName: PositionName.MOBILE,
+          needed: 1,
+          requiredRole: RequiredRole.TECHNICIEN,
+        },
+        {
+          positionName: PositionName.RECEPTION,
+          needed: 2,
+          requiredRole: RequiredRole.ADMINISTRATIF,
+        },
+      ];
+    }
+
+    // Après-midi et soir: postes flexibles
+    return [
+      {
+        positionName: PositionName.GENERAL,
+        needed: 2,
+        requiredRole: RequiredRole.TECHNICIEN,
+      },
+    ];
+  }
+
+  /**
+   * Génère automatiquement tous les shifts pour une période donnée
+   * Crée les 3 shifts (MORNING, AFTERNOON, NIGHT) pour chaque jour
+   * Génère automatiquement les positions appropriées selon le type de jour
+   */
+  async generateShiftsForPeriod(options: {
+    startDate: Date;
+    endDate: Date;
+    skipExisting?: boolean;
+    includeWeekends?: boolean;
+    includeMorningShift?: boolean;
+    includeAfternoonShift?: boolean;
+    includeNightShift?: boolean;
+  }): Promise<{
+    created: number;
+    skipped: number;
+    errors: Array<{ date: string; period: string; error: string }>;
+  }> {
+    const {
+      startDate,
+      endDate,
+      skipExisting = true,
+      includeWeekends = true,
+      includeMorningShift = true,
+      includeAfternoonShift = true,
+      includeNightShift = true,
+    } = options;
+
+    // Validation des dates
+    if (startDate >= endDate) {
+      throw new BadRequestException('La date de début doit être avant la date de fin');
+    }
+
+    // Limiter la génération à 1 an maximum
+    const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysDiff > 365) {
+      throw new BadRequestException('La période ne peut pas dépasser 365 jours');
+    }
+
+    let created = 0;
+    let skipped = 0;
+    const errors: Array<{ date: string; period: string; error: string }> = [];
+
+    // Périodes à générer selon les options
+    const periodsToGenerate: ShiftPeriod[] = [];
+    if (includeMorningShift) periodsToGenerate.push(ShiftPeriod.MORNING);
+    if (includeAfternoonShift) periodsToGenerate.push(ShiftPeriod.AFTERNOON);
+    if (includeNightShift) periodsToGenerate.push(ShiftPeriod.NIGHT);
+
+    if (periodsToGenerate.length === 0) {
+      throw new BadRequestException('Au moins une période de shift doit être sélectionnée');
+    }
+
+    // Itérer sur chaque jour de la période
+    const currentDate = new Date(startDate);
+    currentDate.setHours(0, 0, 0, 0);
+
+    while (currentDate <= endDate) {
+      // Vérifier si on doit inclure les dimanches
+      const isSunday = this.holidaysService.isSunday(currentDate);
+      if (!includeWeekends && isSunday) {
+        currentDate.setDate(currentDate.getDate() + 1);
+        continue;
+      }
+
+      // Déterminer le type de jour
+      const dayType = this.determineDayType(currentDate);
+
+      // Générer les shifts pour chaque période
+      for (const period of periodsToGenerate) {
+        const shiftDate = new Date(currentDate);
+        const dateStr = shiftDate.toISOString().split('T')[0];
+
+        try {
+          // Vérifier si le shift existe déjà
+          const existing = await this.shiftRepository.findOne({
+            where: { shiftDate, period },
+          });
+
+          if (existing) {
+            if (skipExisting) {
+              skipped++;
+              continue;
+            } else {
+              throw new BadRequestException(`Shift ${period} existe déjà pour ${dateStr}`);
+            }
+          }
+
+          // Créer le shift
+          const times = this.getShiftTimes(period);
+          const shift = this.shiftRepository.create({
+            shiftDate,
+            period,
+            startTime: times.start,
+            endTime: times.end,
+            dayType,
+            needed: 1,
+          });
+
+          const savedShift = await this.shiftRepository.save(shift);
+
+          // Générer et créer les positions
+          const positionDefinitions = this.generatePositionDefinitions(dayType, period);
+          const positions = positionDefinitions.map((def) =>
+            this.shiftPositionRepository.create({
+              shiftId: savedShift.id,
+              positionName: def.positionName,
+              needed: def.needed,
+              requiredRole: def.requiredRole,
+            }),
+          );
+
+          await this.shiftPositionRepository.save(positions);
+          created++;
+        } catch (error: any) {
+          errors.push({
+            date: dateStr,
+            period,
+            error: error.message || 'Erreur inconnue',
+          });
+        }
+      }
+
+      // Passer au jour suivant
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return { created, skipped, errors };
+  }
+
   async exportToPDF(startDate: Date, endDate: Date): Promise<Buffer> {
-    const shifts = await this.prisma.shift.findMany({
+    const shifts = await this.shiftRepository.find({
       where: {
-        shiftDate: {
-          gte: startDate,
-          lte: endDate,
-        },
+        shiftDate: Between(startDate, endDate),
       },
-      include: {
-        assignments: {
-          include: {
-            employee: true,
-          },
-        },
-      },
-      orderBy: [{ shiftDate: 'asc' }, { period: 'asc' }],
+      relations: ['assignments', 'assignments.employee'],
+      order: { shiftDate: 'ASC', period: 'ASC' },
     });
 
     const PDFDocument = require('pdfkit');
@@ -320,7 +567,7 @@ export class ShiftService {
         continued: false,
       });
 
-      if (shift.assignments.length === 0) {
+      if (!shift.assignments || shift.assignments.length === 0) {
         doc.fontSize(10).fillColor('red').text('    ⚠ Aucun employé assigné', {
           indent: 20,
         });

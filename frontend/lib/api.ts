@@ -1,11 +1,29 @@
 import axios from 'axios';
 
-// Create axios instance
+// Helper function to get CSRF token from cookie
+function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+
+  const name = 'XSRF-TOKEN=';
+  const decodedCookie = decodeURIComponent(document.cookie);
+  const cookies = decodedCookie.split(';');
+
+  for (let i = 0; i < cookies.length; i++) {
+    let cookie = cookies[i].trim();
+    if (cookie.indexOf(name) === 0) {
+      return cookie.substring(name.length);
+    }
+  }
+  return null;
+}
+
+// Create axios instance with credentials enabled for CSRF cookies
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api',
+  withCredentials: true, // Enable sending cookies with requests
 });
 
-// Request interceptor to add Keycloak token
+// Request interceptor to add Keycloak token and CSRF token
 api.interceptors.request.use(
   async (config) => {
     // Get Keycloak instance from window (set by AuthProvider)
@@ -21,6 +39,15 @@ api.interceptors.request.use(
           console.error('[API] Token refresh failed:', error);
           // Try login if token refresh fails
           keycloak.login();
+        }
+      }
+
+      // Add CSRF token for state-changing requests
+      const method = config.method?.toUpperCase();
+      if (method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+        const csrfToken = getCsrfToken();
+        if (csrfToken) {
+          config.headers['X-CSRF-Token'] = csrfToken;
         }
       }
     }

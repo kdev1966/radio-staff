@@ -71,7 +71,7 @@ export default function CongesPage() {
     try {
       setLoading(true);
 
-      const allResponse = await api.get('/leave');
+      const allResponse = await api.get('/leaves');
       const allRequests = allResponse.data;
 
       setMyRequests(allRequests);
@@ -105,7 +105,7 @@ export default function CongesPage() {
 
     try {
       setSubmitting(true);
-      await api.post('/leave', {
+      await api.post('/leaves', {
         employeeId: keycloak?.tokenParsed?.sub,
         startDate,
         endDate,
@@ -133,7 +133,7 @@ export default function CongesPage() {
     if (!confirm('Approuver cette demande en tant que chef de service ?')) return;
 
     try {
-      await api.post(`/leave/${id}/approve-manager`);
+      await api.post(`/leaves/${id}/approve-manager`);
       await loadRequests();
       alert('Demande approuvée. En attente de validation RH.');
     } catch (error: any) {
@@ -146,7 +146,7 @@ export default function CongesPage() {
     if (!confirm('Approuver cette demande en tant que RH (validation finale) ?')) return;
 
     try {
-      await api.post(`/leave/${id}/approve-hr`);
+      await api.post(`/leaves/${id}/approve-hr`);
       await loadRequests();
       alert('Demande approuvée définitivement');
     } catch (error: any) {
@@ -160,7 +160,7 @@ export default function CongesPage() {
     if (reason === null) return;
 
     try {
-      await api.post(`/leave/${id}/reject`, { reason: reason || undefined });
+      await api.post(`/leaves/${id}/reject`, { reason: reason || undefined });
       await loadRequests();
       alert('Demande rejetée');
     } catch (error: any) {
@@ -173,7 +173,7 @@ export default function CongesPage() {
     if (!confirm('Supprimer cette demande ?')) return;
 
     try {
-      await api.delete(`/leave/${id}`);
+      await api.delete(`/leaves/${id}`);
       await loadRequests();
       alert('Demande supprimée');
     } catch (error: any) {

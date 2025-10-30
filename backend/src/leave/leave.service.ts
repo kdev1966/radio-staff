@@ -1,18 +1,25 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Not, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { LeaveRequest, LeaveStatus } from '../entities/leave-request.entity';
+import { Employee } from '../entities/employee.entity';
 import { CreateLeaveDto } from './dto/create-leave.dto';
 import { UpdateLeaveDto } from './dto/update-leave.dto';
 
 @Injectable()
 export class LeaveService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(LeaveRequest)
+    private leaveRequestRepository: Repository<LeaveRequest>,
+    @InjectRepository(Employee)
+    private employeeRepository: Repository<Employee>,
+  ) {}
 
   async create(createLeaveDto: CreateLeaveDto) {
     const { employeeId, startDate, endDate, days, type } = createLeaveDto;
 
-    const employee = await this.prisma.employee.findUnique({
+    const employee = await this.employeeRepository.findOne({
       where: { id: employeeId },
-      include: { roles: true },
     });
 
     if (!employee) {
@@ -26,18 +33,12 @@ export class LeaveService {
       throw new BadRequestException('Start date must be before end date');
     }
 
-    const overlapping = await this.prisma.leaveRequest.findMany({
+    const overlapping = await this.leaveRequestRepository.find({
       where: {
         employeeId,
-        status: 'APPROVED',
-        OR: [
-          {
-            AND: [
-              { startDate: { lte: end } },
-              { endDate: { gte: start } },
-            ],
-          },
-        ],
+        status: LeaveStatus.APPROVED,
+        startDate: LessThanOrEqual(end),
+        endDate: MoreThanOrEqual(start),
       },
     });
 
@@ -47,85 +48,57 @@ export class LeaveService {
       );
     }
 
-    const teamMembers = await this.prisma.employee.findMany({
+    const teamMembers = await this.employeeRepository.find({
       where: {
-        roles: {
-          some: {
-            roleId: {
-              in: employee.roles.map((r: any) => r.roleId),
-            },
-          },
-        },
-        NOT: { id: employeeId },
+        role: employee.role,
+        id: Not(employeeId),
       },
-      include: {
-        leaveRequests: {
-          where: {
-            status: 'APPROVED',
-            OR: [
-              {
-                AND: [
-                  { startDate: { lte: end } },
-                  { endDate: { gte: start } },
-                ],
-              },
-            ],
-          },
-        },
-      },
+      relations: ['leaveRequests'],
     });
 
-    const conflictingMembers = teamMembers.filter(
-      (m: any) => m.leaveRequests.length > 0,
+    const conflictingMembers = teamMembers.filter((m) =>
+      m.leaveRequests?.some(
+        (lr) =>
+          lr.status === LeaveStatus.APPROVED &&
+          lr.startDate <= end &&
+          lr.endDate >= start,
+      ),
     );
 
     if (conflictingMembers.length > 0) {
       throw new BadRequestException(
-        `Team member(s) already have approved leave during this period: ${conflictingMembers.map((m: any) => `${m.firstName} ${m.lastName}`).join(', ')}`,
+        `Team member(s) already have approved leave during this period: ${conflictingMembers.map((m) => `${m.firstName} ${m.lastName}`).join(', ')}`,
       );
     }
 
-    return this.prisma.leaveRequest.create({
-      data: {
-        employeeId,
-        startDate: start,
-        endDate: end,
-        days,
-        type,
-        status: 'PENDING',
-      },
-      include: {
-        employee: true,
-      },
+    const leaveRequest = this.leaveRequestRepository.create({
+      employeeId,
+      startDate: start,
+      endDate: end,
+      days,
+      type,
+      status: LeaveStatus.PENDING,
     });
+
+    return this.leaveRequestRepository.save(leaveRequest);
   }
 
-  async findAll(employeeId?: string, status?: string) {
-    return this.prisma.leaveRequest.findMany({
-      where: {
-        ...(employeeId && { employeeId }),
-        ...(status && { status }),
-      },
-      include: {
-        employee: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: { requestedAt: 'desc' },
+  async findAll(employeeId?: string, status?: any) {
+    const where: any = {};
+    if (employeeId) where.employeeId = employeeId;
+    if (status) where.status = status;
+
+    return this.leaveRequestRepository.find({
+      where,
+      relations: ['employee'],
+      order: { requestedAt: 'DESC' },
     });
   }
 
   async findOne(id: string) {
-    const leave = await this.prisma.leaveRequest.findUnique({
+    const leave = await this.leaveRequestRepository.findOne({
       where: { id },
-      include: {
-        employee: true,
-      },
+      relations: ['employee'],
     });
 
     if (!leave) {
@@ -138,49 +111,42 @@ export class LeaveService {
   async update(id: string, updateLeaveDto: UpdateLeaveDto) {
     const leave = await this.findOne(id);
 
-    if (leave.status === 'APPROVED' || leave.status === 'REJECTED') {
+    if (leave.status === LeaveStatus.APPROVED || leave.status === LeaveStatus.REJECTED) {
       throw new BadRequestException(
         'Cannot update an already approved or rejected leave request',
       );
     }
 
-    return this.prisma.leaveRequest.update({
-      where: { id },
-      data: {
-        ...updateLeaveDto,
-      },
-      include: {
-        employee: true,
-      },
-    });
+    const updateData: any = {};
+    if (updateLeaveDto.status) updateData.status = updateLeaveDto.status;
+    if (updateLeaveDto.decidedBy) updateData.decidedBy = updateLeaveDto.decidedBy;
+
+    await this.leaveRequestRepository.update(id, updateData);
+    return this.findOne(id);
   }
 
   async approveByManager(id: string, managerId: string) {
     const leave = await this.findOne(id);
 
-    if (leave.status !== 'PENDING') {
+    if (leave.status !== LeaveStatus.PENDING) {
       throw new BadRequestException(
         'Only pending leave requests can be approved by manager',
       );
     }
 
-    return this.prisma.leaveRequest.update({
-      where: { id },
-      data: {
-        status: 'APPROVED_BY_MANAGER',
-        managerApprovedAt: new Date(),
-        managerApprovedBy: managerId,
-      },
-      include: {
-        employee: true,
-      },
+    await this.leaveRequestRepository.update(id, {
+      status: LeaveStatus.APPROVED_BY_MANAGER,
+      managerApprovedAt: new Date(),
+      managerApprovedBy: managerId,
     });
+
+    return this.findOne(id);
   }
 
   async approveByHR(id: string, hrId: string) {
     const leave = await this.findOne(id);
 
-    if (leave.status !== 'APPROVED_BY_MANAGER') {
+    if (leave.status !== LeaveStatus.APPROVED_BY_MANAGER) {
       throw new BadRequestException(
         'Leave request must be approved by manager first',
       );
@@ -188,18 +154,12 @@ export class LeaveService {
 
     const { employeeId, startDate, endDate } = leave;
 
-    const existingApproved = await this.prisma.leaveRequest.findMany({
+    const existingApproved = await this.leaveRequestRepository.find({
       where: {
         employeeId,
-        status: 'APPROVED',
-        OR: [
-          {
-            AND: [
-              { startDate: { lte: endDate } },
-              { endDate: { gte: startDate } },
-            ],
-          },
-        ],
+        status: LeaveStatus.APPROVED,
+        startDate: LessThanOrEqual(endDate),
+        endDate: MoreThanOrEqual(startDate),
       },
     });
 
@@ -209,47 +169,36 @@ export class LeaveService {
       );
     }
 
-    return this.prisma.leaveRequest.update({
-      where: { id },
-      data: {
-        status: 'APPROVED',
-        hrApprovedAt: new Date(),
-        hrApprovedBy: hrId,
-      },
-      include: {
-        employee: true,
-      },
+    await this.leaveRequestRepository.update(id, {
+      status: LeaveStatus.APPROVED,
+      hrApprovedAt: new Date(),
+      hrApprovedBy: hrId,
     });
+
+    return this.findOne(id);
   }
 
   async reject(id: string, rejectedBy: string, reason?: string) {
     const leave = await this.findOne(id);
 
-    if (leave.status === 'APPROVED' || leave.status === 'REJECTED') {
+    if (leave.status === LeaveStatus.APPROVED || leave.status === LeaveStatus.REJECTED) {
       throw new BadRequestException(
         'Cannot reject an already approved or rejected leave request',
       );
     }
 
-    return this.prisma.leaveRequest.update({
-      where: { id },
-      data: {
-        status: 'REJECTED',
-        rejectedAt: new Date(),
-        rejectedBy,
-        rejectionReason: reason,
-      },
-      include: {
-        employee: true,
-      },
+    await this.leaveRequestRepository.update(id, {
+      status: LeaveStatus.REJECTED,
+      rejectedAt: new Date(),
+      rejectedBy,
+      rejectionReason: reason,
     });
+
+    return this.findOne(id);
   }
 
   async remove(id: string) {
     await this.findOne(id);
-
-    return this.prisma.leaveRequest.delete({
-      where: { id },
-    });
+    await this.leaveRequestRepository.delete(id);
   }
 }

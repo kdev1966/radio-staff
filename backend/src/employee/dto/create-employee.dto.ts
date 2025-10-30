@@ -39,8 +39,8 @@ export class CreateEmployeeDto {
 
   @IsString()
   @IsNotEmpty()
-  @Matches(/^(\+\d{1,3}[- ]?)?\d{9,10}$/, {
-    message: 'Numéro de téléphone invalide',
+  @Matches(/^\d{8}$/, {
+    message: 'Le numéro de téléphone doit contenir exactement 8 chiffres',
   })
   phone!: string;
 

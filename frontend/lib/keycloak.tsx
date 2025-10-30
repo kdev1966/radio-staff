@@ -8,8 +8,11 @@ const keycloakConfig = {
   clientId: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || 'radio-frontend',
 };
 
-// Validate configuration
-if (typeof window !== 'undefined') {
+// Debug mode - only log in development
+const isDebug = process.env.NODE_ENV === 'development';
+
+// Validate configuration (only in debug mode)
+if (typeof window !== 'undefined' && isDebug) {
   console.log('[Keycloak] Configuration:', {
     url: keycloakConfig.url,
     realm: keycloakConfig.realm,
@@ -76,11 +79,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           pkceMethod: 'S256',
           checkLoginIframe: false,
           checkLoginIframeInterval: 0,
-          enableLogging: true,
+          enableLogging: isDebug, // Only enable logging in development
         });
 
-        console.log('[Keycloak] Initialized successfully');
-        console.log('[Keycloak] Authenticated:', auth);
+        if (isDebug) {
+          console.log('[Keycloak] Initialized successfully');
+          console.log('[Keycloak] Authenticated:', auth);
+        }
 
         setKeycloak(kc);
         setAuthenticated(auth);
@@ -92,54 +97,54 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setInterval(() => {
             kc.updateToken(70)
               .then((refreshed) => {
-                if (refreshed) {
+                if (refreshed && isDebug) {
                   console.log('[Keycloak] Token refreshed');
                 }
               })
               .catch(() => {
-                console.error('[Keycloak] Failed to refresh token');
+                if (isDebug) {
+                  console.error('[Keycloak] Failed to refresh token');
+                }
               });
           }, 60000);
         }
 
         // Event listeners
         kc.onTokenExpired = () => {
-          console.log('[Keycloak] Token expired');
+          if (isDebug) console.log('[Keycloak] Token expired');
           kc.updateToken(30)
             .then((refreshed) => {
-              if (refreshed) {
+              if (refreshed && isDebug) {
                 console.log('[Keycloak] Token refreshed on expiration');
-              } else {
-                console.log('[Keycloak] Token not refreshed, still valid');
               }
             })
             .catch(() => {
-              console.error('[Keycloak] Failed to refresh expired token');
+              if (isDebug) console.error('[Keycloak] Failed to refresh expired token');
               kc.login();
             });
         };
 
         kc.onAuthSuccess = () => {
-          console.log('[Keycloak] Authentication successful');
+          if (isDebug) console.log('[Keycloak] Authentication successful');
           setAuthenticated(true);
         };
 
         kc.onAuthError = () => {
-          console.error('[Keycloak] Authentication error');
+          if (isDebug) console.error('[Keycloak] Authentication error');
           setAuthenticated(false);
         };
 
         kc.onAuthRefreshSuccess = () => {
-          console.log('[Keycloak] Token refresh successful');
+          if (isDebug) console.log('[Keycloak] Token refresh successful');
         };
 
         kc.onAuthRefreshError = () => {
-          console.error('[Keycloak] Token refresh error');
+          if (isDebug) console.error('[Keycloak] Token refresh error');
           kc.login();
         };
 
         kc.onAuthLogout = () => {
-          console.log('[Keycloak] User logged out');
+          if (isDebug) console.log('[Keycloak] User logged out');
           setAuthenticated(false);
         };
 

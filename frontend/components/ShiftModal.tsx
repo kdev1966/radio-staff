@@ -5,7 +5,8 @@ interface Employee {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
+  matricule: string;
+  role: string;
 }
 
 interface Assignment {
@@ -53,9 +54,12 @@ export default function ShiftModal({ shift, employees, onClose, onRefresh }: Shi
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allShifts, setAllShifts] = useState<Shift[]>([]);
+  const [movingAssignmentId, setMovingAssignmentId] = useState<string | null>(null);
 
   useEffect(() => {
     loadSuggestions();
+    loadAllShifts();
   }, [shift.id]);
 
   const loadSuggestions = async () => {
@@ -64,6 +68,17 @@ export default function ShiftModal({ shift, employees, onClose, onRefresh }: Shi
       setSuggestions(response.data);
     } catch (err) {
       console.error('Error loading suggestions:', err);
+    }
+  };
+
+  const loadAllShifts = async () => {
+    try {
+      const response = await api.get('/shifts');
+      // Filter out the current shift and get upcoming shifts
+      const upcoming = response.data.filter((s: Shift) => s.id !== shift.id);
+      setAllShifts(upcoming);
+    } catch (err) {
+      console.error('Error loading shifts:', err);
     }
   };
 
@@ -94,6 +109,29 @@ export default function ShiftModal({ shift, employees, onClose, onRefresh }: Shi
     } catch (err: any) {
       setError(err.response?.data?.message || 'Erreur lors du retrait');
       console.error('Error unassigning employee:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMoveEmployee = async (assignmentId: string, employeeId: string, targetShiftId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // First unassign from current shift
+      await api.delete(`/shifts/assign/${assignmentId}`);
+
+      // Then assign to target shift
+      await api.post(`/shifts/${targetShiftId}/assign`, { employeeId });
+
+      await onRefresh();
+      await loadSuggestions();
+      setMovingAssignmentId(null);
+
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur lors du déplacement');
+      console.error('Error moving employee:', err);
     } finally {
       setLoading(false);
     }
@@ -159,25 +197,71 @@ export default function ShiftModal({ shift, employees, onClose, onRefresh }: Shi
           {shift.assignments.length === 0 ? (
             <p className="text-gray-500 italic">Aucun employé assigné</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {shift.assignments.map((assignment) => (
-                <div
-                  key={assignment.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {assignment.employee.firstName} {assignment.employee.lastName}
-                    </p>
-                    <p className="text-sm text-gray-500">{assignment.employee.email}</p>
+                <div key={assignment.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {assignment.employee.firstName} {assignment.employee.lastName}
+                      </p>
+                      <p className="text-sm text-gray-500">{assignment.employee.matricule} - {assignment.employee.role}</p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setMovingAssignmentId(movingAssignmentId === assignment.id ? null : assignment.id)}
+                        disabled={loading}
+                        className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
+                      >
+                        {movingAssignmentId === assignment.id ? 'Annuler' : 'Déplacer'}
+                      </button>
+                      <button
+                        onClick={() => handleUnassign(assignment.id)}
+                        disabled={loading}
+                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
+                      >
+                        Retirer
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleUnassign(assignment.id)}
-                    disabled={loading}
-                    className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
-                  >
-                    Retirer
-                  </button>
+
+                  {/* Move to shift selector */}
+                  {movingAssignmentId === assignment.id && (
+                    <div className="mt-3 pt-3 border-t border-gray-300">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Déplacer vers:</p>
+                      <div className="max-h-48 overflow-y-auto space-y-1">
+                        {allShifts.length === 0 ? (
+                          <p className="text-sm text-gray-500 italic">Aucun autre shift disponible</p>
+                        ) : (
+                          allShifts.map((targetShift) => {
+                            const isFull = targetShift.assignments.length >= targetShift.needed;
+                            return (
+                              <button
+                                key={targetShift.id}
+                                onClick={() => handleMoveEmployee(assignment.id, assignment.employee.id, targetShift.id)}
+                                disabled={loading || isFull}
+                                className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                                  isFull
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    : 'bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300'
+                                }`}
+                              >
+                                <div className="flex justify-between items-center">
+                                  <span>
+                                    {new Date(targetShift.shiftDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} - {periodLabels[targetShift.period]}
+                                  </span>
+                                  <span className={`text-xs ${isFull ? 'text-red-600' : 'text-gray-500'}`}>
+                                    {targetShift.assignments.length}/{targetShift.needed}
+                                    {isFull && ' (Complet)'}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -222,7 +306,7 @@ export default function ShiftModal({ shift, employees, onClose, onRefresh }: Shi
                           </span>
                         )}
                       </p>
-                      <p className="text-sm text-gray-500">{employee.email}</p>
+                      <p className="text-sm text-gray-500">{employee.matricule} - {employee.role}</p>
                       {isSuggestion && (
                         <p className="text-xs text-gray-600 mt-1">
                           {item.weeklyHours}h cette semaine • {item.nightShiftsThisWeek} nuit(s)

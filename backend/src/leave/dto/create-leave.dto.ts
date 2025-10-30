@@ -1,4 +1,5 @@
 import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { LeaveType } from '../../common/enums/leave.enum';
 
 export class CreateLeaveDto {
   @IsUUID()
@@ -14,8 +15,10 @@ export class CreateLeaveDto {
   @Min(0.5)
   days!: number;
 
-  @IsEnum(['CP', 'RTT', 'MALADIE', 'FORMATION', 'SPECIAL'])
-  type!: string;
+  @IsEnum(LeaveType, {
+    message: 'Le type doit être l\'un des suivants: CP, RTT, MALADIE, FORMATION, SPECIAL',
+  })
+  type!: LeaveType;
 
   @IsOptional()
   @IsString()

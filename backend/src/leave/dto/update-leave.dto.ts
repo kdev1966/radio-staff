@@ -1,9 +1,12 @@
 import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { LeaveStatus } from '../../common/enums/leave.enum';
 
 export class UpdateLeaveDto {
-  @IsEnum(['PENDING', 'APPROVED', 'REJECTED'])
+  @IsEnum(LeaveStatus, {
+    message: 'Le statut doit être l\'un des suivants: PENDING, APPROVED_BY_MANAGER, APPROVED, REJECTED',
+  })
   @IsOptional()
-  status?: string;
+  status?: LeaveStatus;
 
   @IsString()
   @IsOptional()

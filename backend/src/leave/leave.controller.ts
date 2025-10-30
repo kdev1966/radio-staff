@@ -17,7 +17,7 @@ import { KeycloakAuthGuard } from '../common/guards/keycloak-auth.guard';
 import { RolesGuard, Role } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 
-@Controller('leave')
+@Controller('leaves')
 @UseGuards(KeycloakAuthGuard, RolesGuard)
 export class LeaveController {
   constructor(private readonly leaveService: LeaveService) {}

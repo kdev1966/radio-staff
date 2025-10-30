@@ -6,6 +6,7 @@ import { RolesGuard, Role } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateShiftDto } from './dto/create-shift.dto';
 import { AssignShiftDto } from './dto/assign-shift.dto';
+import { GenerateShiftsDto } from './dto/generate-shifts.dto';
 
 @Controller('shifts')
 @UseGuards(KeycloakAuthGuard, RolesGuard)
@@ -16,6 +17,22 @@ export class ShiftController {
   @Roles(Role.ADMIN, Role.CHEF_SERVICE, Role.RH, Role.EMPLOYE)
   async getAll() {
     return this.shiftService.findAll();
+  }
+
+  // Routes spécifiques AVANT les routes génériques
+  @Post('generate')
+  @Roles(Role.ADMIN, Role.CHEF_SERVICE)
+  @HttpCode(HttpStatus.CREATED)
+  async generateShifts(@Body() generateShiftsDto: GenerateShiftsDto) {
+    return this.shiftService.generateShiftsForPeriod({
+      startDate: new Date(generateShiftsDto.startDate),
+      endDate: new Date(generateShiftsDto.endDate),
+      skipExisting: generateShiftsDto.skipExisting ?? true,
+      includeWeekends: generateShiftsDto.includeWeekends ?? true,
+      includeMorningShift: generateShiftsDto.includeMorningShift ?? true,
+      includeAfternoonShift: generateShiftsDto.includeAfternoonShift ?? true,
+      includeNightShift: generateShiftsDto.includeNightShift ?? true,
+    });
   }
 
   @Post()

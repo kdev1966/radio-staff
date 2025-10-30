@@ -1,0 +1,4 @@
+prisma/
+scripts/
+prisma.service.ts
+*.prisma
