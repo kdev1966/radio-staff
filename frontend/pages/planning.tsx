@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useAuth } from '@/lib/keycloak';
+import { useAuth } from '@/lib/auth';
 import ShiftCalendar from '@/components/ShiftCalendar';
 import BulkShiftCreator from '@/components/BulkShiftCreator';
 import PlanningStats from '@/components/PlanningStats';
@@ -30,7 +30,7 @@ interface Shift {
 }
 
 export default function PlanningPage() {
-  const { keycloak, initialized } = useAuth();
+  const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,13 +39,11 @@ export default function PlanningPage() {
   const [showStats, setShowStats] = useState(true);
 
   useEffect(() => {
-    if (initialized && keycloak?.authenticated) {
+    if (user) {
       loadEmployees();
       loadShifts();
-    } else if (initialized) {
-      keycloak?.login();
     }
-  }, [initialized, keycloak]);
+  }, [user]);
 
   const loadEmployees = async () => {
     try {
@@ -110,7 +108,7 @@ export default function PlanningPage() {
     }
   };
 
-  if (!initialized || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

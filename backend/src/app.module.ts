@@ -5,7 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmployeeModule } from './employee/employee.module';
 import { ShiftModule } from './shift/shift.module';
 import { LeaveModule } from './leave/leave.module';
-import { KeycloakModule } from './keycloak/keycloak.module';
+import { AuthModule } from './auth/auth.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { CsrfTokenInterceptor } from './common/interceptors/csrf-token.interceptor';
 import { CsrfGuard } from './common/guards/csrf.guard';
@@ -36,10 +36,10 @@ import { AuditLog } from './entities/audit-log.entity';
       }),
     }),
     TypeOrmModule.forFeature([AuditLog]),
+    AuthModule,
     EmployeeModule,
     ShiftModule,
     LeaveModule,
-    KeycloakModule,
   ],
   controllers: [HealthController],
   providers: [

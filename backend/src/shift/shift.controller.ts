@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Post, Delete, Body, UseGuards, Req, HttpCode, HttpStatus, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { ShiftService } from './shift.service';
-import { KeycloakAuthGuard } from '../common/guards/keycloak-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Role } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateShiftDto } from './dto/create-shift.dto';
@@ -9,7 +9,7 @@ import { AssignShiftDto } from './dto/assign-shift.dto';
 import { GenerateShiftsDto } from './dto/generate-shifts.dto';
 
 @Controller('shifts')
-@UseGuards(KeycloakAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ShiftController {
   constructor(private readonly shiftService: ShiftService) {}
 

@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
-import { useAuth } from '@/lib/keycloak';
+import { useAuth } from '@/lib/auth';
 
 export default function Navigation() {
   const router = useRouter();
-  const { keycloak, logout } = useAuth();
+  const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
 
   const handleLogout = () => {
@@ -13,8 +13,8 @@ export default function Navigation() {
   };
 
   const getUserName = () => {
-    if (keycloak?.tokenParsed) {
-      return keycloak.tokenParsed.name || keycloak.tokenParsed.preferred_username || 'Utilisateur';
+    if (user) {
+      return `${user.firstName} ${user.lastName}`;
     }
     return 'Utilisateur';
   };

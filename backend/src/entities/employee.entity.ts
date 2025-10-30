@@ -6,6 +6,9 @@ import { AuditLog } from './audit-log.entity';
 export enum EmployeeRole {
   TECHNICIEN = 'TECHNICIEN',
   ADMINISTRATIF = 'ADMINISTRATIF',
+  ADMIN = 'ADMIN',
+  CHEF_SERVICE = 'CHEF_SERVICE',
+  RH = 'RH',
 }
 
 @Entity('employees')
@@ -36,6 +39,12 @@ export class Employee {
 
   @Column()
   address!: string;
+
+  @Column({ unique: true })
+  email!: string;
+
+  @Column({ select: false })
+  password!: string;
 
   @Column({ unique: true, nullable: true, name: 'keycloak_id' })
   keycloakId?: string;

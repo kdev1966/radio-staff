@@ -12,6 +12,8 @@ export enum Role {
   CHEF_SERVICE = 'CHEF_SERVICE',
   EMPLOYE = 'EMPLOYE',
   RH = 'RH',
+  TECHNICIEN = 'TECHNICIEN',
+  ADMINISTRATIF = 'ADMINISTRATIF',
 }
 
 @Injectable()
@@ -31,11 +33,18 @@ export class RolesGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    if (!user || !user.roles) {
+    if (!user) {
+      throw new ForbiddenException('User not authenticated');
+    }
+
+    // Support both JWT format (user.role as string) and Keycloak format (user.roles as array)
+    const userRoles = Array.isArray(user.roles) ? user.roles : [user.role];
+
+    if (!userRoles || userRoles.length === 0) {
       throw new ForbiddenException('User roles not found');
     }
 
-    const hasRole = requiredRoles.some((role) => user.roles.includes(role));
+    const hasRole = requiredRoles.some((role) => userRoles.includes(role));
 
     if (!hasRole) {
       throw new ForbiddenException(

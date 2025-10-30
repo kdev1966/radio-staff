@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useAuth } from '@/lib/keycloak';
+import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 
 interface LeaveRequest {
@@ -40,7 +40,7 @@ const statusColors = {
 };
 
 export default function CongesPage() {
-  const { keycloak, initialized } = useAuth();
+  const { user } = useAuth();
   const [isManager, setIsManager] = useState(false);
   const [isHR, setIsHR] = useState(false);
   const [myRequests, setMyRequests] = useState<LeaveRequest[]>([]);
@@ -57,15 +57,13 @@ export default function CongesPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (initialized && keycloak?.authenticated) {
-      const roles = keycloak.realmAccess?.roles || [];
-      setIsManager(roles.includes('CHEF_SERVICE') || roles.includes('ADMIN'));
-      setIsHR(roles.includes('RH') || roles.includes('ADMIN'));
+    if (user) {
+      const role = user.role;
+      setIsManager(role === 'CHEF_SERVICE' || role === 'ADMIN');
+      setIsHR(role === 'RH' || role === 'ADMIN');
       loadRequests();
-    } else if (initialized) {
-      keycloak?.login();
     }
-  }, [initialized, keycloak]);
+  }, [user]);
 
   const loadRequests = async () => {
     try {
@@ -76,12 +74,12 @@ export default function CongesPage() {
 
       setMyRequests(allRequests);
 
-      const roles = keycloak?.realmAccess?.roles || [];
-      if (roles.includes('CHEF_SERVICE') || roles.includes('ADMIN')) {
+      const role = user?.role;
+      if (role === 'CHEF_SERVICE' || role === 'ADMIN') {
         setPendingRequests(allRequests.filter((r: LeaveRequest) => r.status === 'PENDING'));
       }
 
-      if (roles.includes('RH') || roles.includes('ADMIN')) {
+      if (role === 'RH' || role === 'ADMIN') {
         setManagerApprovedRequests(allRequests.filter((r: LeaveRequest) => r.status === 'APPROVED_BY_MANAGER'));
       }
     } catch (error) {
@@ -106,7 +104,7 @@ export default function CongesPage() {
     try {
       setSubmitting(true);
       await api.post('/leaves', {
-        employeeId: keycloak?.tokenParsed?.sub,
+        employeeId: user?.id,
         startDate,
         endDate,
         days,
@@ -190,7 +188,7 @@ export default function CongesPage() {
     });
   };
 
-  if (!initialized) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

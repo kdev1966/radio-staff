@@ -33,7 +33,13 @@ export class CsrfGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Check if CSRF protection is skipped for this route
+    // Check if route is marked as public (skip CSRF for public routes)
+    const isPublic = this.reflector.get<boolean>('isPublic', context.getHandler());
+    if (isPublic) {
+      return true;
+    }
+
+    // Check if CSRF protection is explicitly skipped for this route
     const skipCsrf = this.reflector.get<boolean>('skipCsrf', context.getHandler());
     if (skipCsrf) {
       return true;

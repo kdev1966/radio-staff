@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { useAuth } from '@/lib/keycloak';
+import { useAuth } from '@/lib/auth';
 
 interface DashboardStats {
   totalEmployees: number;
@@ -39,7 +39,7 @@ interface LeaveRequest {
 }
 
 export default function Home() {
-  const { initialized, authenticated } = useAuth();
+  const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalEmployees: 0,
     totalShifts: 0,
@@ -51,11 +51,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Only load dashboard data when Keycloak is initialized and user is authenticated
-    if (initialized && authenticated) {
+    if (user) {
       loadDashboardData();
     }
-  }, [initialized, authenticated]);
+  }, [user]);
 
   const loadDashboardData = async () => {
     try {

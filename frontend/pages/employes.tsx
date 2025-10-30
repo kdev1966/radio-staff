@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { useAuth } from '@/lib/keycloak';
+import { useAuth } from '@/lib/auth';
 
 interface Employee {
   id: string;
@@ -14,7 +14,7 @@ interface Employee {
 }
 
 export default function EmployesPage() {
-  const { initialized, authenticated } = useAuth();
+  const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -39,11 +39,10 @@ export default function EmployesPage() {
   };
 
   useEffect(() => {
-    // Only load employees when Keycloak is initialized and user is authenticated
-    if (initialized && authenticated) {
+    if (user) {
       loadEmployees();
     }
-  }, [initialized, authenticated]);
+  }, [user]);
 
   const loadEmployees = async () => {
     try {
