@@ -2,7 +2,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install OpenSSL for Prisma
+# Install OpenSSL for PostgreSQL
 RUN apk add --no-cache openssl
 
 # Copy package files
@@ -10,15 +10,6 @@ COPY package*.json ./
 
 # Install ALL dependencies (including dev)
 RUN npm ci
-
-# Copy prisma schema
-COPY prisma ./prisma
-
-# Set Prisma binary target for Alpine
-ENV PRISMA_CLI_BINARY_TARGETS=linux-musl
-
-# Generate Prisma client
-RUN npx prisma generate
 
 # Copy source code
 COPY . .

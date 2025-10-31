@@ -41,13 +41,16 @@ export class EmployeeService {
     }
 
     const employee = this.employeeRepository.create({
+      serviceId: '00000000-0000-0000-0000-000000000001', // Default service for now
       matricule: createEmployeeDto.matricule,
       firstName: createEmployeeDto.firstName,
       lastName: createEmployeeDto.lastName,
       birthDate: new Date(createEmployeeDto.birthDate),
       phone: createEmployeeDto.phone,
-      role: createEmployeeDto.role,
+      role: createEmployeeDto.role as any,
       address: createEmployeeDto.address,
+      email: (createEmployeeDto as any).email || `${createEmployeeDto.matricule}@temp.local`,
+      password: 'temp123', // Will be updated by auth module
     });
 
     return this.employeeRepository.save(employee);

@@ -1,14 +1,5 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  ManyToOne,
-  JoinColumn,
-  Index,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { Employee } from './employee.entity';
-import { RadiologyService } from './radiology-service.entity';
 
 export enum AuditAction {
   CREATE = 'CREATE',
@@ -19,30 +10,16 @@ export enum AuditAction {
   ASSIGN_SHIFT = 'ASSIGN_SHIFT',
   APPROVE_LEAVE = 'APPROVE_LEAVE',
   REJECT_LEAVE = 'REJECT_LEAVE',
-  TRANSFER_EMPLOYEE = 'TRANSFER_EMPLOYEE',
-  ARCHIVE_EMPLOYEE = 'ARCHIVE_EMPLOYEE',
-  CREATE_SERVICE = 'CREATE_SERVICE', // SUPER_ADMIN actions
-  SUSPEND_SERVICE = 'SUSPEND_SERVICE',
-  GRANT_PERMISSION = 'GRANT_PERMISSION',
 }
 
 @Entity('audit_logs')
-@Index(['serviceId', 'timestamp']) // Pour recherches par service et date
 @Index(['userId'])
 @Index(['action'])
+@Index(['timestamp'])
 @Index(['statusCode'])
 export class AuditLog {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
-
-  // Multi-tenant: FK vers RadiologyService (nullable pour actions SUPER_ADMIN)
-  @Column({ name: 'service_id', type: 'uuid', nullable: true })
-  @Index()
-  serviceId?: string;
-
-  @ManyToOne(() => RadiologyService, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'service_id' })
-  service?: RadiologyService;
 
   @Column({
     type: 'enum',
@@ -56,20 +33,13 @@ export class AuditLog {
   @Column({ type: 'varchar', nullable: true, name: 'entity_id' })
   entityId?: string;
 
-  // userId peut être employeeId OU superAdminId
   @Column({ type: 'varchar', nullable: true, name: 'user_id' })
   userId?: string;
 
   @Column({ type: 'varchar', nullable: true })
   username?: string;
 
-  @Column({ type: 'boolean', default: false, name: 'is_super_admin' })
-  isSuperAdmin!: boolean;
-
-  @ManyToOne(() => Employee, (employee) => employee.auditLogs, {
-    nullable: true,
-    onDelete: 'SET NULL',
-  })
+  @ManyToOne(() => Employee, (employee) => employee.auditLogs, { nullable: true })
   @JoinColumn({ name: 'user_id' })
   employee?: Employee;
 

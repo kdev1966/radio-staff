@@ -24,13 +24,13 @@ export class EmployeeController {
   constructor(private readonly employeeService: EmployeeService) {}
 
   @Get()
-  @Roles(Role.ADMIN, Role.CHEF_SERVICE, Role.RH, Role.EMPLOYE)
+  @Roles(Role.ADMIN, Role.CHEF_SERVICE, Role.RH, Role.EMPLOYE, Role.ADMINISTRATIF)
   async findAll() {
     return this.employeeService.findAll();
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.CHEF_SERVICE, Role.RH, Role.EMPLOYE)
+  @Roles(Role.ADMIN, Role.CHEF_SERVICE, Role.RH, Role.EMPLOYE, Role.ADMINISTRATIF)
   async findOne(@Param('id') id: string) {
     return this.employeeService.findOne(id);
   }

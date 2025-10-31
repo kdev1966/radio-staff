@@ -14,7 +14,7 @@ export class ShiftController {
   constructor(private readonly shiftService: ShiftService) {}
 
   @Get()
-  @Roles(Role.ADMIN, Role.CHEF_SERVICE, Role.RH, Role.EMPLOYE)
+  @Roles(Role.ADMIN, Role.CHEF_SERVICE, Role.RH, Role.EMPLOYE, Role.ADMINISTRATIF)
   async getAll() {
     return this.shiftService.findAll();
   }

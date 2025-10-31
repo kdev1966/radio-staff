@@ -6,7 +6,7 @@ un dossier dist/ avec les images Docker sauvegardées (*.tar)
 un script install.sh qui charge les images, lance docker compose up et initialise la base
 un manuel admin.pdf (généré automatiquement)
 Stack imposée
-NestJS + Prisma (PostgreSQL) – backend
+NestJS + TypeORM (PostgreSQL) – backend
 Next.js (mode static export) – frontend
 Keycloak (en mode standalone) – authentification SSO interne
 Nginx – reverse-proxy + serveur des fichiers statiques
@@ -38,7 +38,7 @@ B. Images Docker :
 Doivent être buildées et sauvegardées (docker save) dans un dossier dist/offline-images/.
 Doivent tourner sur architecture AMD64 Linux Alpine.
 C. Migrations & seed :
-prisma migrate deploy obligatoire au premier démarrage.
+typeorm migration:run obligatoire au premier démarrage.
 Seed automatique si base vide (3 employés, 1 semaine de shifts, 2 rôles).
 D. Taille finale : < 2 Go sur clé USB (base vide + images).
 E. Temps d’install : ≤ 5 min sur PC hôpital (Docker déjà présent).
@@ -50,10 +50,10 @@ radio-staff/
 ├── .env.example
 ├── backend/
 │   ├── Dockerfile
-│   ├── prisma/schema.prisma
+│   ├── typeorm/migrations/
 │   ├── src/
 │   │   ├── main.ts
-│   │   ├── prisma.service.ts
+│   │   ├── entities/
 │   │   ├── employee/
 │   │   ├── shift/
 │   │   ├── leave/
@@ -81,7 +81,7 @@ radio-staff/
     ├── schema.svg            # généré par tbls
     └── admin.pdf             # manuel de déploiement
 Livrables intermédiaires à générer dès maintenant
-backend/prisma/schema.prisma complet (tables + enums + relations).
+backend/src/entities/*.entity.ts complet (entités TypeORM + enums + relations).
 Controllers NestJS : EmployeeController, ShiftController, LeaveController (CRUD + règles métier).
 ShiftCalendar.tsx (FullCalendar) avec appels axios.
 Dockerfile multi-stage pour chaque service (cache offline).
@@ -92,18 +92,18 @@ pg_dump -h localhost -U radio radiodb > dist/seed.sql
 Script install.sh (côté hôpital) :
 docker load < offline-images.tar
 docker compose up -d
-docker exec -it radio-backend npm run prisma:migrate
+docker exec -it radio-backend npm run migration:run
 affiche URL finale + compte admin Keycloak.
 Style de code attendu
 TypeScript strict = true
-Pas de any – utiliser les types Prisma générés
+Pas de any – utiliser les types TypeORM générés
 Nommage : camelCase variables, kebab-case fichiers, UPPER_CASE enums
 Commentaires UNIQUEMENT si logique métier non évidente
 Zero lib externe non listée (vérifier licences MIT/BSD)
 Processus de génération
-Écris intégralement chaque fichier demandé dans l’ordre :
+Écris intégralement chaque fichier demandé dans l'ordre :
 a. docker-compose.yml complet
-b. backend/prisma/schema.prisma
+b. backend/src/entities/*.entity.ts
 c. Controllers & services NestJS
 d. Components React + pages Next.js
 e. Dockerfiles & scripts shell

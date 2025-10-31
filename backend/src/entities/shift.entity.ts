@@ -1,6 +1,16 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, Unique } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  OneToMany,
+  ManyToOne,
+  JoinColumn,
+  Index,
+  Unique,
+} from 'typeorm';
 import { ShiftAssignment } from './shift-assignment.entity';
 import { ShiftPosition } from './shift-position.entity';
+import { RadiologyService } from './radiology-service.entity';
 
 export enum ShiftPeriod {
   MORNING = 'MORNING',
@@ -14,10 +24,22 @@ export enum DayType {
 }
 
 @Entity('shifts')
-@Unique(['shiftDate', 'period'])
+@Unique(['serviceId', 'shiftDate', 'period']) // Unique par service
+@Index(['serviceId', 'shiftDate']) // Pour recherches par service et date
 export class Shift {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  // Multi-tenant: FK vers RadiologyService
+  @Column({ name: 'service_id', type: 'uuid' })
+  @Index()
+  serviceId!: string;
+
+  @ManyToOne(() => RadiologyService, (service) => service.shifts, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'service_id' })
+  service!: RadiologyService;
 
   @Column({ type: 'date', name: 'shift_date' })
   shiftDate!: Date;

@@ -1,7 +1,8 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
-import { LeaveRequest, LeaveStatus } from '../entities/leave-request.entity';
+import { LeaveRequest } from '../entities/leave-request.entity';
+import { LeaveStatus } from '../common/enums/leave.enum';
 import { Employee } from '../entities/employee.entity';
 import { CreateLeaveDto } from './dto/create-leave.dto';
 import { UpdateLeaveDto } from './dto/update-leave.dto';
@@ -111,7 +112,7 @@ export class LeaveService {
   async update(id: string, updateLeaveDto: UpdateLeaveDto) {
     const leave = await this.findOne(id);
 
-    if (leave.status === LeaveStatus.APPROVED || leave.status === LeaveStatus.REJECTED) {
+    if (leave.status === LeaveStatus.APPROVED || leave.status === LeaveStatus.REJECTED_BY_RH || leave.status === LeaveStatus.REJECTED_BY_ADMIN) {
       throw new BadRequestException(
         'Cannot update an already approved or rejected leave request',
       );
@@ -135,9 +136,9 @@ export class LeaveService {
     }
 
     await this.leaveRequestRepository.update(id, {
-      status: LeaveStatus.APPROVED_BY_MANAGER,
-      managerApprovedAt: new Date(),
-      managerApprovedBy: managerId,
+      status: LeaveStatus.APPROVED_BY_RH,
+      rhReviewedAt: new Date(),
+      rhReviewedBy: managerId,
     });
 
     return this.findOne(id);
@@ -146,9 +147,9 @@ export class LeaveService {
   async approveByHR(id: string, hrId: string) {
     const leave = await this.findOne(id);
 
-    if (leave.status !== LeaveStatus.APPROVED_BY_MANAGER) {
+    if (leave.status !== LeaveStatus.APPROVED_BY_RH) {
       throw new BadRequestException(
-        'Leave request must be approved by manager first',
+        'Leave request must be approved by RH first',
       );
     }
 
@@ -171,8 +172,8 @@ export class LeaveService {
 
     await this.leaveRequestRepository.update(id, {
       status: LeaveStatus.APPROVED,
-      hrApprovedAt: new Date(),
-      hrApprovedBy: hrId,
+      adminReviewedAt: new Date(),
+      adminReviewedBy: hrId,
     });
 
     return this.findOne(id);
@@ -181,14 +182,19 @@ export class LeaveService {
   async reject(id: string, rejectedBy: string, reason?: string) {
     const leave = await this.findOne(id);
 
-    if (leave.status === LeaveStatus.APPROVED || leave.status === LeaveStatus.REJECTED) {
+    if (leave.status === LeaveStatus.APPROVED || leave.status === LeaveStatus.REJECTED_BY_RH || leave.status === LeaveStatus.REJECTED_BY_ADMIN) {
       throw new BadRequestException(
         'Cannot reject an already approved or rejected leave request',
       );
     }
 
+    // Determine rejection type based on current status
+    const rejectionStatus = leave.status === LeaveStatus.PENDING
+      ? LeaveStatus.REJECTED_BY_RH
+      : LeaveStatus.REJECTED_BY_ADMIN;
+
     await this.leaveRequestRepository.update(id, {
-      status: LeaveStatus.REJECTED,
+      status: rejectionStatus,
       rejectedAt: new Date(),
       rejectedBy,
       rejectionReason: reason,

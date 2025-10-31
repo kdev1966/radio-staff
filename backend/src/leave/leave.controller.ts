@@ -29,7 +29,7 @@ export class LeaveController {
   }
 
   @Get()
-  @Roles(Role.EMPLOYE, Role.CHEF_SERVICE, Role.RH, Role.ADMIN)
+  @Roles(Role.EMPLOYE, Role.CHEF_SERVICE, Role.RH, Role.ADMIN, Role.ADMINISTRATIF)
   findAll(
     @Query('employeeId') employeeId?: string,
     @Query('status') status?: string,
@@ -38,7 +38,7 @@ export class LeaveController {
   }
 
   @Get(':id')
-  @Roles(Role.EMPLOYE, Role.CHEF_SERVICE, Role.RH, Role.ADMIN)
+  @Roles(Role.EMPLOYE, Role.CHEF_SERVICE, Role.RH, Role.ADMIN, Role.ADMINISTRATIF)
   findOne(@Param('id') id: string) {
     return this.leaveService.findOne(id);
   }

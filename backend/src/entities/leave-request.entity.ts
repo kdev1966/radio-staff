@@ -1,30 +1,40 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { Employee } from './employee.entity';
-
-export enum LeaveType {
-  CP = 'CP',
-  RTT = 'RTT',
-  MALADIE = 'MALADIE',
-  FORMATION = 'FORMATION',
-  SPECIAL = 'SPECIAL',
-}
-
-export enum LeaveStatus {
-  PENDING = 'PENDING',
-  APPROVED_BY_MANAGER = 'APPROVED_BY_MANAGER',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED',
-}
+import { RadiologyService } from './radiology-service.entity';
+import { LeaveType, LeaveStatus } from '../common/enums/leave.enum';
 
 @Entity('leave_requests')
+@Index(['serviceId', 'startDate', 'endDate']) // Pour recherches par service et période
 export class LeaveRequest {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'employee_id' })
+  // Multi-tenant: FK vers RadiologyService
+  @Column({ name: 'service_id', type: 'uuid' })
+  @Index()
+  serviceId!: string;
+
+  @ManyToOne(() => RadiologyService, (service) => service.leaveRequests, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'service_id' })
+  service!: RadiologyService;
+
+  @Column({ name: 'employee_id', type: 'uuid' })
+  @Index()
   employeeId!: string;
 
-  @ManyToOne(() => Employee, (employee) => employee.leaveRequests, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Employee, (employee) => employee.leaveRequests, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'employee_id' })
   employee?: Employee;
 
@@ -50,27 +60,39 @@ export class LeaveRequest {
   })
   status!: LeaveStatus;
 
+  @Column({ type: 'text', nullable: true })
+  comment?: string;
+
   @CreateDateColumn({ name: 'requested_at' })
   requestedAt!: Date;
 
-  @Column({ type: 'timestamp', nullable: true, name: 'manager_approved_at' })
-  managerApprovedAt?: Date;
+  // Workflow: RH approval
+  @Column({ type: 'timestamp', nullable: true, name: 'rh_reviewed_at' })
+  rhReviewedAt?: Date;
 
-  @Column({ nullable: true, name: 'manager_approved_by' })
-  managerApprovedBy?: string;
+  @Column({ type: 'uuid', nullable: true, name: 'rh_reviewed_by' })
+  rhReviewedBy?: string;
 
-  @Column({ type: 'timestamp', nullable: true, name: 'hr_approved_at' })
-  hrApprovedAt?: Date;
+  @Column({ type: 'text', nullable: true, name: 'rh_comment' })
+  rhComment?: string;
 
-  @Column({ nullable: true, name: 'hr_approved_by' })
-  hrApprovedBy?: string;
+  // Workflow: ADMIN final approval
+  @Column({ type: 'timestamp', nullable: true, name: 'admin_reviewed_at' })
+  adminReviewedAt?: Date;
 
+  @Column({ type: 'uuid', nullable: true, name: 'admin_reviewed_by' })
+  adminReviewedBy?: string;
+
+  @Column({ type: 'text', nullable: true, name: 'admin_comment' })
+  adminComment?: string;
+
+  // Rejection
   @Column({ type: 'timestamp', nullable: true, name: 'rejected_at' })
   rejectedAt?: Date;
 
-  @Column({ nullable: true, name: 'rejected_by' })
+  @Column({ type: 'uuid', nullable: true, name: 'rejected_by' })
   rejectedBy?: string;
 
-  @Column({ nullable: true, name: 'rejection_reason' })
+  @Column({ type: 'text', nullable: true, name: 'rejection_reason' })
   rejectionReason?: string;
 }

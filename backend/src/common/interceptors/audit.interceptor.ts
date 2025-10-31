@@ -29,7 +29,7 @@ export class AuditInterceptor implements NestInterceptor {
     const startTime = Date.now();
     const userAgent = request.headers['user-agent'] || 'Unknown';
     const ipAddress = request.ip || request.connection.remoteAddress || 'Unknown';
-    const userId = request.user?.id || 'anonymous';
+    const userId = request.user?.id || null;
     const username = request.user?.username || 'anonymous';
 
     return next.handle().pipe(
