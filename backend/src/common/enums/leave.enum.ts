@@ -11,10 +11,12 @@ export enum LeaveType {
 
 /**
  * Leave Status Enum
+ * Workflow: EMPLOYE → RH → ADMIN
  */
 export enum LeaveStatus {
-  PENDING = 'PENDING',                        // En attente
-  APPROVED_BY_MANAGER = 'APPROVED_BY_MANAGER', // Approuvé par le manager
-  APPROVED = 'APPROVED',                       // Approuvé (RH)
-  REJECTED = 'REJECTED',                       // Rejeté
+  PENDING = 'PENDING',                     // En attente de validation RH
+  APPROVED_BY_RH = 'APPROVED_BY_RH',       // Approuvé par RH, en attente ADMIN
+  APPROVED = 'APPROVED',                   // Approuvé final par ADMIN
+  REJECTED_BY_RH = 'REJECTED_BY_RH',       // Rejeté par RH
+  REJECTED_BY_ADMIN = 'REJECTED_BY_ADMIN', // Rejeté par ADMIN
 }
