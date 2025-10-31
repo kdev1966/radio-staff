@@ -32,7 +32,7 @@ async function bootstrap() {
   ).split(',').map(origin => origin.trim());
 
   app.enableCors({
-    origin: allowedOrigins,
+    origin: true, // Allow all origins for testing (change to allowedOrigins in production)
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With'],

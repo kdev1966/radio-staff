@@ -11,8 +11,12 @@ function AppContent({ Component, pageProps }: { Component: AppProps['Component']
   const { user, loading } = useAuth();
   const isLoginPage = router.pathname === '/login';
 
+  console.log('[_app] AppContent - loading:', loading, 'user:', user, 'isLoginPage:', isLoginPage, 'pathname:', router.pathname);
+
   useEffect(() => {
+    console.log('[_app] useEffect - loading:', loading, 'user:', user, 'isLoginPage:', isLoginPage);
     if (!loading && !user && !isLoginPage) {
+      console.log('[_app] Redirecting to /login');
       router.replace('/login');
     }
   }, [user, loading, isLoginPage]);

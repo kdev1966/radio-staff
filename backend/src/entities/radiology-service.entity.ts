@@ -23,6 +23,7 @@ export class RadiologyService {
     type: 'enum',
     enum: SubscriptionTier,
     default: SubscriptionTier.TRIAL,
+    name: 'subscription_tier',
   })
   subscriptionTier!: SubscriptionTier;
 
@@ -30,6 +31,7 @@ export class RadiologyService {
     type: 'enum',
     enum: ServiceStatus,
     default: ServiceStatus.TRIAL,
+    name: 'status',
   })
   status!: ServiceStatus;
 

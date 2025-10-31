@@ -6,12 +6,12 @@ import {
   MinLength,
   MaxLength,
   Matches,
+  IsEmail,
+  IsOptional,
+  IsArray,
 } from 'class-validator';
-
-export enum EmployeeRole {
-  TECHNICIEN = 'TECHNICIEN',
-  ADMINISTRATIF = 'ADMINISTRATIF',
-}
+import { EmployeeRole } from '../../entities/employee.entity';
+import { EmployeeType, Permission } from '../../common/enums/permission.enum';
 
 export class CreateEmployeeDto {
   @IsString()
@@ -44,9 +44,27 @@ export class CreateEmployeeDto {
   })
   phone!: string;
 
+  @IsEmail()
+  @IsNotEmpty()
+  email!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  password!: string;
+
   @IsEnum(EmployeeRole)
   @IsNotEmpty()
   role!: EmployeeRole;
+
+  @IsEnum(EmployeeType)
+  @IsOptional()
+  employeeType?: EmployeeType;
+
+  @IsArray()
+  @IsEnum(Permission, { each: true })
+  @IsOptional()
+  permissions?: Permission[];
 
   @IsString()
   @IsNotEmpty()

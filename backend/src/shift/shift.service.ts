@@ -21,24 +21,28 @@ export class ShiftService {
     private holidaysService: HolidaysService,
   ) {}
 
-  async findAll() {
+  async findAll(serviceId: string) {
     return this.shiftRepository.find({
-      relations: ['assignments', 'assignments.employee', 'positions'],
+      where: { serviceId },
+      relations: ['assignments', 'assignments.employee', 'positions', 'service'],
       order: { shiftDate: 'ASC', startTime: 'ASC' },
     });
   }
 
-  async create(data: {
-    shiftDate: Date;
-    period: ShiftPeriod;
-    dayType?: DayType;
-    needed?: number;
-  }) {
+  async create(
+    data: {
+      shiftDate: Date;
+      period: ShiftPeriod;
+      dayType?: DayType;
+      needed?: number;
+    },
+    serviceId: string,
+  ) {
     const { shiftDate, period, dayType: providedDayType, needed } = data;
 
-    // Vérifier si un shift existe déjà
+    // Vérifier si un shift existe déjà dans ce service
     const existing = await this.shiftRepository.findOne({
-      where: { shiftDate, period },
+      where: { shiftDate, period, serviceId },
     });
 
     if (existing) {
@@ -54,6 +58,7 @@ export class ShiftService {
 
     // Créer le shift
     const shift = this.shiftRepository.create({
+      serviceId,
       shiftDate,
       period,
       startTime: times.start,
@@ -85,14 +90,19 @@ export class ShiftService {
     });
   }
 
-  async assign(shiftId: string, employeeId: string, assignedBy?: string) {
+  async assign(
+    shiftId: string,
+    employeeId: string,
+    serviceId: string,
+    assignedBy?: string,
+  ) {
     const shift = await this.shiftRepository.findOne({
-      where: { id: shiftId },
+      where: { id: shiftId, serviceId },
       relations: ['assignments', 'assignments.employee'],
     });
 
     if (!shift) {
-      throw new NotFoundException(`Shift ${shiftId} non trouvé`);
+      throw new NotFoundException(`Shift ${shiftId} non trouvé dans votre service`);
     }
 
     const weekStart = new Date(shift.shiftDate);
@@ -101,12 +111,12 @@ export class ShiftService {
     weekEnd.setDate(weekEnd.getDate() + 7);
 
     const employee = await this.employeeRepository.findOne({
-      where: { id: employeeId },
+      where: { id: employeeId, serviceId },
       relations: ['assignments', 'assignments.shift'],
     });
 
     if (!employee) {
-      throw new NotFoundException(`Employé ${employeeId} non trouvé`);
+      throw new NotFoundException(`Employé ${employeeId} non trouvé dans votre service`);
     }
 
     // Filter assignments within the date range
@@ -136,18 +146,28 @@ export class ShiftService {
     });
   }
 
-  async unassign(assignmentId: string) {
+  async unassign(assignmentId: string, serviceId: string) {
+    // Verify assignment belongs to service
+    const assignment = await this.shiftAssignmentRepository.findOne({
+      where: { id: assignmentId },
+      relations: ['shift'],
+    });
+
+    if (!assignment || assignment.shift.serviceId !== serviceId) {
+      throw new NotFoundException(`Assignment non trouvée dans votre service`);
+    }
+
     return this.shiftAssignmentRepository.delete(assignmentId);
   }
 
-  async getSuggestions(shiftId: string) {
+  async getSuggestions(shiftId: string, serviceId: string) {
     const shift = await this.shiftRepository.findOne({
-      where: { id: shiftId },
+      where: { id: shiftId, serviceId },
       relations: ['assignments'],
     });
 
     if (!shift) {
-      throw new NotFoundException(`Shift ${shiftId} non trouvé`);
+      throw new NotFoundException(`Shift ${shiftId} non trouvé dans votre service`);
     }
 
     const weekStart = new Date(shift.shiftDate);
@@ -156,6 +176,7 @@ export class ShiftService {
     weekEnd.setDate(weekEnd.getDate() + 7);
 
     const allEmployees = await this.employeeRepository.find({
+      where: { serviceId, isActive: true },
       relations: ['assignments', 'assignments.shift'],
     });
 
@@ -390,15 +411,18 @@ export class ShiftService {
    * Crée les 3 shifts (MORNING, AFTERNOON, NIGHT) pour chaque jour
    * Génère automatiquement les positions appropriées selon le type de jour
    */
-  async generateShiftsForPeriod(options: {
-    startDate: Date;
-    endDate: Date;
-    skipExisting?: boolean;
-    includeWeekends?: boolean;
-    includeMorningShift?: boolean;
-    includeAfternoonShift?: boolean;
-    includeNightShift?: boolean;
-  }): Promise<{
+  async generateShiftsForPeriod(
+    options: {
+      startDate: Date;
+      endDate: Date;
+      skipExisting?: boolean;
+      includeWeekends?: boolean;
+      includeMorningShift?: boolean;
+      includeAfternoonShift?: boolean;
+      includeNightShift?: boolean;
+    },
+    serviceId: string,
+  ): Promise<{
     created: number;
     skipped: number;
     errors: Array<{ date: string; period: string; error: string }>;
@@ -459,9 +483,9 @@ export class ShiftService {
         const dateStr = shiftDate.toISOString().split('T')[0];
 
         try {
-          // Vérifier si le shift existe déjà
+          // Vérifier si le shift existe déjà dans ce service
           const existing = await this.shiftRepository.findOne({
-            where: { shiftDate, period },
+            where: { shiftDate, period, serviceId },
           });
 
           if (existing) {
@@ -476,6 +500,7 @@ export class ShiftService {
           // Créer le shift
           const times = this.getShiftTimes(period);
           const shift = this.shiftRepository.create({
+            serviceId,
             shiftDate,
             period,
             startTime: times.start,
@@ -515,12 +540,17 @@ export class ShiftService {
     return { created, skipped, errors };
   }
 
-  async exportToPDF(startDate: Date, endDate: Date): Promise<Buffer> {
+  async exportToPDF(
+    startDate: Date,
+    endDate: Date,
+    serviceId: string,
+  ): Promise<Buffer> {
     const shifts = await this.shiftRepository.find({
       where: {
+        serviceId,
         shiftDate: Between(startDate, endDate),
       },
-      relations: ['assignments', 'assignments.employee'],
+      relations: ['assignments', 'assignments.employee', 'service'],
       order: { shiftDate: 'ASC', period: 'ASC' },
     });
 

@@ -58,14 +58,22 @@ api.interceptors.response.use(
       // Server responded with error status
       const status = error.response.status;
       const message = error.response.data?.message || error.message;
+      const url = error.config?.url || '';
 
-      if (status === 401) {
+      // Don't redirect on 401 during login attempts (allow fallback to SuperAdmin login)
+      const isLoginAttempt = url.includes('/auth/login') || url.includes('/auth/super-admin/login');
+
+      if (status === 401 && !isLoginAttempt) {
         // Unauthorized - clear token and redirect to login
         console.error('[API] Unauthorized - redirecting to login');
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token');
+          localStorage.removeItem('user');
           window.location.href = '/login';
         }
+      } else if (status === 401 && isLoginAttempt) {
+        // Login failed - let the login function handle it (for Employee -> SuperAdmin fallback)
+        console.error('[API] Login attempt failed - will try alternate login method');
       } else if (status === 403) {
         console.error('[API] Forbidden - insufficient permissions');
       } else if (status === 404) {

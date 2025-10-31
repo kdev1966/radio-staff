@@ -11,7 +11,10 @@
     "migration:generate": "npm run typeorm -- migration:generate",
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
-    "seed:users": "ts-node -r tsconfig-paths/register src/seeds/create-users.ts"
+    "seed:users": "ts-node -r tsconfig-paths/register src/seeds/create-users.ts",
+    "seed:multi-tenant": "ts-node -r tsconfig-paths/register src/seeds/multi-tenant-seed.ts",
+    "seed:service-admin": "ts-node -r tsconfig-paths/register src/seeds/service-admin-test-seed.ts",
+    "seed:all": "npm run seed:multi-tenant && npm run seed:service-admin"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",

@@ -8,15 +8,19 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { Employee } from '../entities/employee.entity';
+import { SuperAdmin } from '../entities/super-admin.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Employee]),
+    TypeOrmModule.forFeature([Employee, SuperAdmin]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET', 'dev-secret-change-in-production'),
+        secret: configService.get<string>(
+          'JWT_SECRET',
+          'dev-secret-change-in-production',
+        ),
         signOptions: { expiresIn: '24h' },
       }),
       inject: [ConfigService],

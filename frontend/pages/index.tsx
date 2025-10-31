@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -39,7 +40,11 @@ interface LeaveRequest {
 }
 
 export default function Home() {
+  const router = useRouter();
   const { user } = useAuth();
+
+  console.log('[Dashboard] Render - user:', user, 'isSuperAdmin:', user?.isSuperAdmin);
+
   const [stats, setStats] = useState<DashboardStats>({
     totalEmployees: 0,
     totalShifts: 0,
@@ -51,10 +56,46 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log('[Dashboard] useEffect triggered, user:', user);
     if (user) {
-      loadDashboardData();
+      // Redirect ADMIN/RH to service-admin dashboard
+      if (user.role === 'ADMIN' || user.role === 'RH') {
+        console.log('[Dashboard] Redirecting ADMIN/RH to service-admin dashboard');
+        router.push('/service-admin/dashboard');
+        return;
+      }
+
+      // Check if user is SuperAdmin
+      if (user.isSuperAdmin) {
+        console.log('[Dashboard] Loading SuperAdmin dashboard');
+        loadSuperAdminDashboard();
+      } else {
+        console.log('[Dashboard] Loading Employee dashboard');
+        loadDashboardData();
+      }
+    } else {
+      console.log('[Dashboard] No user, waiting...');
     }
-  }, [user]);
+  }, [user, router]);
+
+  const loadSuperAdminDashboard = async () => {
+    try {
+      // Use dedicated SuperAdmin dashboard endpoint
+      const statsRes = await api.get('/super-admin/dashboard/stats');
+      const platformStats = statsRes.data;
+
+      setStats({
+        totalEmployees: platformStats.totalEmployees,
+        totalShifts: platformStats.activeServices, // Show active services count
+        pendingLeaves: 0,
+        todayShifts: platformStats.totalShifts,
+      });
+    } catch (error) {
+      console.error('Erreur lors du chargement du dashboard SuperAdmin:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -144,6 +185,93 @@ export default function Home() {
     );
   }
 
+  // Render SuperAdmin Dashboard
+  if (user?.isSuperAdmin) {
+    return (
+      <div>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard SuperAdmin</h1>
+          <p className="text-gray-600 mt-2">Plateforme de gestion multi-services</p>
+        </div>
+
+        {/* SuperAdmin Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Services Actifs</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalShifts}</p>
+              </div>
+              <div className="text-4xl">🏥</div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Employés Total</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalEmployees}</p>
+              </div>
+              <div className="text-4xl">👥</div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Plateforme</p>
+                <p className="text-xl font-bold text-gray-900 mt-2">Multi-Tenant</p>
+              </div>
+              <div className="text-4xl">🌐</div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Statut</p>
+                <p className="text-xl font-bold text-green-600 mt-2">Opérationnel</p>
+              </div>
+              <div className="text-4xl">✅</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions for SuperAdmin */}
+        <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg shadow-md p-8 text-white">
+          <h2 className="text-2xl font-bold mb-4">Actions SuperAdmin</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Link
+              href="/services"
+              className="bg-white/20 hover:bg-white/30 rounded-lg p-4 transition-colors"
+            >
+              <div className="text-3xl mb-2">🏥</div>
+              <h3 className="font-semibold">Gérer les Services</h3>
+              <p className="text-sm text-purple-100 mt-1">Créer et configurer les services de radiologie</p>
+            </Link>
+            <Link
+              href="/super-admins"
+              className="bg-white/20 hover:bg-white/30 rounded-lg p-4 transition-colors"
+            >
+              <div className="text-3xl mb-2">👨‍💼</div>
+              <h3 className="font-semibold">Super Admins</h3>
+              <p className="text-sm text-purple-100 mt-1">Gérer les administrateurs plateforme</p>
+            </Link>
+            <Link
+              href="/analytics"
+              className="bg-white/20 hover:bg-white/30 rounded-lg p-4 transition-colors"
+            >
+              <div className="text-3xl mb-2">📊</div>
+              <h3 className="font-semibold">Analytiques</h3>
+              <p className="text-sm text-purple-100 mt-1">Vue d'ensemble de la plateforme</p>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render Employee Dashboard
   return (
     <div>
       <div className="mb-8">

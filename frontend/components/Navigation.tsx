@@ -14,17 +14,46 @@ export default function Navigation() {
 
   const getUserName = () => {
     if (user) {
+      // SuperAdmin has fullName, Employee has firstName + lastName
+      if (user.isSuperAdmin) {
+        return user.fullName || 'Super Admin';
+      }
       return `${user.firstName} ${user.lastName}`;
     }
     return 'Utilisateur';
   };
 
-  const navItems = [
-    { href: '/', label: 'Tableau de bord', icon: '📊' },
-    { href: '/planning', label: 'Planning', icon: '📅' },
-    { href: '/employes', label: 'Employés', icon: '👥' },
-    { href: '/conges', label: 'Congés', icon: '🏖️' },
-  ];
+  // Different navigation items based on user role
+  const getNavItems = () => {
+    if (user?.isSuperAdmin) {
+      return [
+        { href: '/', label: 'Dashboard', icon: '📊' },
+        { href: '/services', label: 'Services', icon: '🏥' },
+        { href: '/super-admins', label: 'Super Admins', icon: '👨‍💼' },
+        { href: '/analytics', label: 'Analytiques', icon: '📈' },
+      ];
+    }
+
+    // Service Admin/RH navigation
+    if (user?.role === 'ADMIN' || user?.role === 'RH') {
+      return [
+        { href: '/service-admin/dashboard', label: 'Dashboard Service', icon: '📊' },
+        { href: '/service-admin/employees', label: 'Employés', icon: '👥' },
+        { href: '/service-admin/leaves', label: 'Congés', icon: '🏖️' },
+        { href: '/service-admin/shifts', label: 'Planning', icon: '📅' },
+      ];
+    }
+
+    // Regular employee navigation
+    return [
+      { href: '/', label: 'Tableau de bord', icon: '📊' },
+      { href: '/planning', label: 'Planning', icon: '📅' },
+      { href: '/employes', label: 'Employés', icon: '👥' },
+      { href: '/conges', label: 'Congés', icon: '🏖️' },
+    ];
+  };
+
+  const navItems = getNavItems();
 
   const isActive = (href: string) => {
     if (href === '/') {

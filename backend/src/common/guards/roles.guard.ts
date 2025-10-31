@@ -7,13 +7,13 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
+/**
+ * Role Enum - Simplified for multi-tenant architecture
+ */
 export enum Role {
-  ADMIN = 'ADMIN',
-  CHEF_SERVICE = 'CHEF_SERVICE',
-  EMPLOYE = 'EMPLOYE',
-  RH = 'RH',
-  TECHNICIEN = 'TECHNICIEN',
-  ADMINISTRATIF = 'ADMINISTRATIF',
+  ADMIN = 'ADMIN',        // Chef de service (1 per service)
+  RH = 'RH',             // Ressources Humaines (with configurable permissions)
+  EMPLOYE = 'EMPLOYE',   // Employee (TECHNICIEN or ADMINISTRATIF)
 }
 
 @Injectable()
@@ -37,18 +37,21 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // Support both JWT format (user.role as string) and Keycloak format (user.roles as array)
-    const userRoles = Array.isArray(user.roles) ? user.roles : [user.role];
-
-    if (!userRoles || userRoles.length === 0) {
-      throw new ForbiddenException('User roles not found');
+    // SUPER_ADMIN bypasses role checks (has access to everything)
+    if (user.isSuperAdmin) {
+      return true;
     }
 
-    const hasRole = requiredRoles.some((role) => userRoles.includes(role));
+    // Check user role
+    if (!user.role) {
+      throw new ForbiddenException('User role not found');
+    }
+
+    const hasRole = requiredRoles.includes(user.role);
 
     if (!hasRole) {
       throw new ForbiddenException(
-        `User requires one of the following roles: ${requiredRoles.join(', ')}`,
+        `Access denied: You need one of these roles: ${requiredRoles.join(', ')}`,
       );
     }
 

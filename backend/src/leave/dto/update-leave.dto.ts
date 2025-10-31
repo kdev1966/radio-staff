@@ -1,14 +1,28 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { LeaveStatus } from '../../common/enums/leave.enum';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsDateString,
+  IsNumber,
+  Min,
+} from 'class-validator';
+import { LeaveType } from '../../common/enums/leave.enum';
 
 export class UpdateLeaveDto {
-  @IsEnum(LeaveStatus, {
-    message: 'Le statut doit être l\'un des suivants: PENDING, APPROVED_BY_MANAGER, APPROVED, REJECTED',
-  })
+  @IsDateString()
   @IsOptional()
-  status?: LeaveStatus;
+  startDate?: string;
 
-  @IsString()
+  @IsDateString()
   @IsOptional()
-  decidedBy?: string;
+  endDate?: string;
+
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  days?: number;
+
+  @IsEnum(LeaveType)
+  @IsOptional()
+  type?: LeaveType;
 }

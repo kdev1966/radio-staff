@@ -1,9 +1,14 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Employee } from '../entities/employee.entity';
+import { SuperAdmin } from '../entities/super-admin.entity';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
@@ -12,13 +17,32 @@ export class AuthService {
   constructor(
     @InjectRepository(Employee)
     private employeeRepository: Repository<Employee>,
+    @InjectRepository(SuperAdmin)
+    private superAdminRepository: Repository<SuperAdmin>,
     private jwtService: JwtService,
   ) {}
 
-  async validateUser(email: string, password: string): Promise<Employee | null> {
+  /**
+   * Validate Employee credentials
+   */
+  async validateEmployee(
+    email: string,
+    password: string,
+  ): Promise<Employee | null> {
     const employee = await this.employeeRepository.findOne({
-      where: { email },
-      select: ['id', 'email', 'password', 'firstName', 'lastName', 'role', 'matricule'],
+      where: { email, isActive: true },
+      select: [
+        'id',
+        'email',
+        'password',
+        'firstName',
+        'lastName',
+        'role',
+        'matricule',
+        'serviceId',
+        'permissions',
+        'employeeType',
+      ],
     });
 
     if (!employee) {
@@ -35,8 +59,45 @@ export class AuthService {
     return result as Employee;
   }
 
-  async login(loginDto: LoginDto) {
-    const employee = await this.validateUser(loginDto.email, loginDto.password);
+  /**
+   * Validate SuperAdmin credentials
+   */
+  async validateSuperAdmin(
+    email: string,
+    password: string,
+  ): Promise<SuperAdmin | null> {
+    const superAdmin = await this.superAdminRepository.findOne({
+      where: { email, isActive: true },
+      select: ['id', 'email', 'password', 'fullName'],
+    });
+
+    if (!superAdmin) {
+      return null;
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, superAdmin.password);
+    if (!isPasswordValid) {
+      return null;
+    }
+
+    // Update last login
+    await this.superAdminRepository.update(superAdmin.id, {
+      lastLoginAt: new Date(),
+    });
+
+    // Remove password from returned object
+    const { password: _, ...result } = superAdmin;
+    return result as SuperAdmin;
+  }
+
+  /**
+   * Employee login
+   */
+  async loginEmployee(loginDto: LoginDto) {
+    const employee = await this.validateEmployee(
+      loginDto.email,
+      loginDto.password,
+    );
 
     if (!employee) {
       throw new UnauthorizedException('Email ou mot de passe incorrect');
@@ -46,6 +107,9 @@ export class AuthService {
       sub: employee.id,
       email: employee.email,
       role: employee.role,
+      serviceId: employee.serviceId,
+      permissions: employee.permissions || [],
+      isSuperAdmin: false,
     };
 
     return {
@@ -57,8 +121,48 @@ export class AuthService {
         lastName: employee.lastName,
         role: employee.role,
         matricule: employee.matricule,
+        serviceId: employee.serviceId,
+        permissions: employee.permissions,
+        employeeType: employee.employeeType,
       },
     };
+  }
+
+  /**
+   * SuperAdmin login
+   */
+  async loginSuperAdmin(loginDto: LoginDto) {
+    const superAdmin = await this.validateSuperAdmin(
+      loginDto.email,
+      loginDto.password,
+    );
+
+    if (!superAdmin) {
+      throw new UnauthorizedException('Email ou mot de passe incorrect');
+    }
+
+    const payload = {
+      sub: superAdmin.id,
+      email: superAdmin.email,
+      isSuperAdmin: true,
+    };
+
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: superAdmin.id,
+        email: superAdmin.email,
+        fullName: superAdmin.fullName,
+        isSuperAdmin: true,
+      },
+    };
+  }
+
+  /**
+   * @deprecated Use loginEmployee instead
+   */
+  async login(loginDto: LoginDto) {
+    return this.loginEmployee(loginDto);
   }
 
   async register(registerDto: RegisterDto) {
@@ -96,15 +200,29 @@ export class AuthService {
     return result;
   }
 
-  async getProfile(userId: string) {
+  async getProfile(userId: string, isSuperAdmin: boolean = false) {
+    if (isSuperAdmin) {
+      const superAdmin = await this.superAdminRepository.findOne({
+        where: { id: userId },
+        select: ['id', 'email', 'fullName', 'isActive', 'lastLoginAt'],
+      });
+
+      if (!superAdmin) {
+        throw new UnauthorizedException('SuperAdmin non trouvé');
+      }
+
+      return { ...superAdmin, isSuperAdmin: true };
+    }
+
     const employee = await this.employeeRepository.findOne({
       where: { id: userId },
+      relations: ['service'],
     });
 
     if (!employee) {
-      throw new UnauthorizedException('Utilisateur non trouvé');
+      throw new UnauthorizedException('Employé non trouvé');
     }
 
-    return employee;
+    return { ...employee, isSuperAdmin: false };
   }
 }
